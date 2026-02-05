@@ -326,8 +326,8 @@ export async function getNotes(filters?: {
     constraints.push(where('classification.type', '==', 'uncategorized'));
   }
 
-  // Default ordering by meeting start time
-  constraints.push(orderBy('meeting.start_time', 'desc'));
+  // Default ordering by created_at (meeting.start_time can be null for imported notes)
+  constraints.push(orderBy('created_at', 'desc'));
 
   if (filters?.limit) {
     constraints.push(limit(filters.limit));

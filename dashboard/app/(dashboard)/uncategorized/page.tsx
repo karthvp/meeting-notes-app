@@ -34,7 +34,11 @@ export default function UncategorizedPage() {
 
   const isLoading = loadingNotes || loadingClients || loadingProjects;
 
-  const uncategorizedNotes = notes.filter((note) => !note.clientId);
+  // Filter for uncategorized notes - check both new classification.type and legacy clientId
+  const uncategorizedNotes = notes.filter((note) =>
+    note.classification?.type === 'uncategorized' ||
+    (!note.classification?.client_id && !note.clientId)
+  );
 
   if (isLoading) {
     return (

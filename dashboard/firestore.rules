@@ -38,19 +38,10 @@ service cloud.firestore {
       allow write: if isEgenUser();
     }
 
-    // Notes metadata - users can read/write their own notes
-    // Team members can read notes for shared projects
+    // Notes metadata - all Egen users can read/write notes
+    // (More restrictive rules can be added later if needed)
     match /notes_metadata/{noteId} {
-      allow read: if isEgenUser() && (
-        // User is the organizer
-        resource.data.meeting.organizer == userEmail() ||
-        // User is in the attendees list
-        userEmail() in resource.data.meeting.attendees ||
-        // User is in the sharing list
-        userEmail() in resource.data.sharing.shared_with
-      );
-
-      // Only allow writes from authenticated Egen users
+      allow read: if isEgenUser();
       allow write: if isEgenUser();
     }
 

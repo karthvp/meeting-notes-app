@@ -383,12 +383,12 @@ export function CategorizeModal({
           {/* Client Selection */}
           <div className="space-y-2">
             <Label htmlFor="client">Client</Label>
-            <Select value={selectedClient} onValueChange={handleClientChange}>
+            <Select value={selectedClient || 'none'} onValueChange={(v) => handleClientChange(v === 'none' ? '' : v)}>
               <SelectTrigger id="client">
                 <SelectValue placeholder="Select a client" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No client</SelectItem>
+                <SelectItem value="none">No client</SelectItem>
                 {clients.map((client) => (
                   <SelectItem key={client.id} value={client.id}>
                     {client.name}
@@ -402,9 +402,9 @@ export function CategorizeModal({
           <div className="space-y-2">
             <Label htmlFor="project">Project</Label>
             <Select
-              value={selectedProject}
+              value={selectedProject || 'none'}
               onValueChange={(value) => {
-                setSelectedProject(value);
+                setSelectedProject(value === 'none' ? '' : value);
                 setUsedSuggestion(false);
               }}
               disabled={!selectedClient}
@@ -417,7 +417,7 @@ export function CategorizeModal({
                 />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No project</SelectItem>
+                <SelectItem value="none">No project</SelectItem>
                 {filteredProjects.map((project) => (
                   <SelectItem key={project.id} value={project.id}>
                     {project.project_name}

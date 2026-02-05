@@ -407,21 +407,30 @@ export async function getUncategorizedNotes(limitCount?: number): Promise<Note[]
   const db = getFirebaseDb();
   const notesRef = collection(db, 'notes_metadata');
 
-  const constraints: any[] = [
-    where('classification.type', '==', 'uncategorized'),
-    orderBy('created_at', 'desc'),
-  ];
+  // Query without orderBy to avoid needing composite index, sort client-side
+  const q = query(
+    notesRef,
+    where('classification.type', '==', 'uncategorized')
+  );
 
-  if (limitCount) {
-    constraints.push(limit(limitCount));
-  }
-
-  const q = query(notesRef, ...constraints);
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({
+  let notes = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Note[];
+
+  // Sort by created_at descending client-side
+  notes.sort((a, b) => {
+    const aTime = a.created_at?.toMillis?.() || 0;
+    const bTime = b.created_at?.toMillis?.() || 0;
+    return bTime - aTime;
+  });
+
+  if (limitCount) {
+    notes = notes.slice(0, limitCount);
+  }
+
+  return notes;
 }
 
 /**

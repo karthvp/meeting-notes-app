@@ -199,12 +199,12 @@ export function BulkCategorizeModal({
               {/* Client Selection */}
               <div className="space-y-2">
                 <Label htmlFor="client">Client</Label>
-                <Select value={selectedClient} onValueChange={handleClientChange}>
+                <Select value={selectedClient || 'none'} onValueChange={(v) => handleClientChange(v === 'none' ? '' : v)}>
                   <SelectTrigger id="client">
                     <SelectValue placeholder="Select a client" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No client</SelectItem>
+                    <SelectItem value="none">No client</SelectItem>
                     {clients.map((client) => (
                       <SelectItem key={client.id} value={client.id}>
                         {client.name}
@@ -218,8 +218,8 @@ export function BulkCategorizeModal({
               <div className="space-y-2">
                 <Label htmlFor="project">Project</Label>
                 <Select
-                  value={selectedProject}
-                  onValueChange={setSelectedProject}
+                  value={selectedProject || 'none'}
+                  onValueChange={(v) => setSelectedProject(v === 'none' ? '' : v)}
                   disabled={!selectedClient}
                 >
                   <SelectTrigger id="project">
@@ -230,7 +230,7 @@ export function BulkCategorizeModal({
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No project</SelectItem>
+                    <SelectItem value="none">No project</SelectItem>
                     {filteredProjects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         {project.project_name}

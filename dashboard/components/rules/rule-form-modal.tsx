@@ -332,12 +332,12 @@ export function RuleFormModal({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="classifyAs">Classification Type</Label>
-                <Select value={classifyAs} onValueChange={setClassifyAs}>
+                <Select value={classifyAs || 'none'} onValueChange={(v) => setClassifyAs(v === 'none' ? '' : v)}>
                   <SelectTrigger id="classifyAs">
                     <SelectValue placeholder="Select type..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No change</SelectItem>
+                    <SelectItem value="none">No change</SelectItem>
                     {CLASSIFICATION_TYPES.map((type) => (
                       <SelectItem key={type.value} value={type.value}>
                         {type.label}
@@ -349,12 +349,12 @@ export function RuleFormModal({
 
               <div className="space-y-2">
                 <Label htmlFor="team">Internal Team</Label>
-                <Select value={team} onValueChange={setTeam}>
+                <Select value={team || 'none'} onValueChange={(v) => setTeam(v === 'none' ? '' : v)}>
                   <SelectTrigger id="team">
                     <SelectValue placeholder="Select team..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No team</SelectItem>
+                    <SelectItem value="none">No team</SelectItem>
                     {INTERNAL_TEAMS.map((t) => (
                       <SelectItem key={t.value} value={t.value}>
                         {t.label}
@@ -369,9 +369,9 @@ export function RuleFormModal({
               <div className="space-y-2">
                 <Label htmlFor="clientId">Client</Label>
                 <Select
-                  value={clientId}
+                  value={clientId || 'none'}
                   onValueChange={(v) => {
-                    setClientId(v);
+                    setClientId(v === 'none' ? '' : v);
                     setProjectId(''); // Reset project when client changes
                   }}
                 >
@@ -379,7 +379,7 @@ export function RuleFormModal({
                     <SelectValue placeholder="Select client..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Auto-detect</SelectItem>
+                    <SelectItem value="none">Auto-detect</SelectItem>
                     {clients.map((client) => (
                       <SelectItem key={client.id} value={client.id}>
                         {client.name}
@@ -392,8 +392,8 @@ export function RuleFormModal({
               <div className="space-y-2">
                 <Label htmlFor="projectId">Project</Label>
                 <Select
-                  value={projectId}
-                  onValueChange={setProjectId}
+                  value={projectId || 'none'}
+                  onValueChange={(v) => setProjectId(v === 'none' ? '' : v)}
                   disabled={!clientId}
                 >
                   <SelectTrigger id="projectId">
@@ -402,7 +402,7 @@ export function RuleFormModal({
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Auto-detect</SelectItem>
+                    <SelectItem value="none">Auto-detect</SelectItem>
                     {filteredProjects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         {project.project_name}

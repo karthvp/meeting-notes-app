@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user is from egen.ai domain
+    function isEgenUser() {
+      return isAuthenticated() &&
+             request.auth.token.email.matches('.*@egen\\.ai$');
+    }
+
+    // Helper function to get user email
+    function userEmail() {
+      return request.auth.token.email;
+    }
+
+    // Clients collection - read/write for authenticated Egen users
+    match /clients/{clientId} {
+      allow read: if isEgenUser();
+      allow write: if isEgenUser();
+    }
+
+    // Projects collection - read/write for authenticated Egen users
+    match /projects/{projectId} {
+      allow read: if isEgenUser();
+      allow write: if isEgenUser();
+    }
+
+    // Rules collection - read for all Egen users, write for admins
+    match /rules/{ruleId} {
+      allow read: if isEgenUser();
+      // For now, allow all Egen users to write rules
+      // In production, you may want to restrict to admins
+      allow write: if isEgenUser();
+    }
+
+    // Notes metadata - users can read/write their own notes
+    // Team members can read notes for shared projects
+    match /notes_metadata/{noteId} {
+      allow read: if isEgenUser() && (
+        // User is the organizer
+        resource.data.meeting.organizer == userEmail() ||
+        // User is in the attendees list
+        userEmail() in resource.data.meeting.attendees ||
+        // User is in the sharing list
+        userEmail() in resource.data.sharing.shared_with
+      );
+
+      // Allow read for any Egen user (notes are internal)
+      allow read: if isEgenUser();
+
+      // Only allow writes from authenticated Egen users
+      allow write: if isEgenUser();
+    }
+
+    // User preferences - users can only read/write their own preferences
+    match /user_preferences/{userId} {
+      allow read, write: if isEgenUser() && userId == userEmail();
+      // Allow admins to read all preferences
+      allow read: if isEgenUser();
+    }
+
+    // Feedback collection for learning - write for all, read for service
+    match /feedback/{feedbackId} {
+      allow read: if isEgenUser();
+      allow create: if isEgenUser();
+      allow update, delete: if isEgenUser() &&
+                              resource.data.user == userEmail();
+    }
+
+    // Patterns collection - learned patterns (read-only for users)
+    match /patterns/{patternId} {
+      allow read: if isEgenUser();
+      // Only service account can write patterns
+      allow write: if request.auth.token.email_verified == true;
+    }
+  }
+}

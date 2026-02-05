@@ -1,0 +1,44 @@
+{
+  "name": "egen-meeting-notes-functions",
+  "version": "1.0.0",
+  "description": "Cloud Functions for Egen Meeting Notes",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx @google-cloud/functions-framework --target=classify",
+    "dev:classify": "npx @google-cloud/functions-framework --target=classify --signature-type=http",
+    "dev:saveNote": "npx @google-cloud/functions-framework --target=saveNote --signature-type=http",
+    "dev:share": "npx @google-cloud/functions-framework --target=share --signature-type=http",
+    "dev:feedback": "npx @google-cloud/functions-framework --target=feedback --signature-type=http",
+    "dev:updateNote": "npx @google-cloud/functions-framework --target=updateNote --signature-type=http",
+    "dev:processNewNote": "npx @google-cloud/functions-framework --target=processNewNote --signature-type=http",
+    "dev:processFile": "npx @google-cloud/functions-framework --target=processFile --signature-type=http",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "deploy:classify": "gcloud functions deploy classify --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point classify --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:saveNote": "gcloud functions deploy saveNote --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point saveNote --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:share": "gcloud functions deploy share --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point share --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:feedback": "gcloud functions deploy feedback --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point feedback --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:updateNote": "gcloud functions deploy updateNote --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point updateNote --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:processNewNote": "gcloud functions deploy processNewNote --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point processNewNote --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:processFile": "gcloud functions deploy processFile --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point processFile --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:registerDriveWebhook": "gcloud functions deploy registerDriveWebhook --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point registerDriveWebhook --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:unregisterDriveWebhook": "gcloud functions deploy unregisterDriveWebhook --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point unregisterDriveWebhook --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:getDriveWebhookConfig": "gcloud functions deploy getDriveWebhookConfig --runtime nodejs20 --trigger-http --allow-unauthenticated --entry-point getDriveWebhookConfig --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2",
+    "deploy:all": "npm run deploy:classify && npm run deploy:saveNote && npm run deploy:share && npm run deploy:feedback && npm run deploy:updateNote && npm run deploy:processNewNote && npm run deploy:processFile && npm run deploy:registerDriveWebhook && npm run deploy:unregisterDriveWebhook && npm run deploy:getDriveWebhookConfig",
+    "deploy:prod:classify": "gcloud functions deploy classify --runtime nodejs20 --trigger-http --entry-point classify --source=. --project=karthik-patil-sandbox --region=us-central1 --gen2 --no-allow-unauthenticated",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.3.0",
+    "@google-cloud/functions-framework": "^3.3.0",
+    "@google-cloud/vertexai": "^1.9.0",
+    "googleapis": "^131.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

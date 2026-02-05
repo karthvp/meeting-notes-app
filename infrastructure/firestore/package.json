@@ -1,0 +1,18 @@
+{
+  "name": "egen-meeting-notes-firestore-setup",
+  "version": "1.0.0",
+  "description": "Firestore setup and seed scripts for Egen Meeting Notes",
+  "main": "seed-data.js",
+  "scripts": {
+    "seed": "node seed-data.js",
+    "deploy-rules": "firebase deploy --only firestore:rules",
+    "export": "node export-data.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

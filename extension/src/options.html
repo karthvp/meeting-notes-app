@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Egen Meeting Notes - Settings</title>
+  <link rel="stylesheet" href="../styles/popup.css">
+  <style>
+    body {
+      width: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .page-header img {
+      width: 48px;
+      height: 48px;
+    }
+
+    .page-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .page-header p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .settings-section {
+      margin-bottom: 32px;
+    }
+
+    .settings-section h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border-color-subtle);
+    }
+
+    .setting-item:last-child {
+      border-bottom: none;
+    }
+
+    .setting-info {
+      flex: 1;
+      margin-right: 16px;
+    }
+
+    .setting-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .setting-description {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* Toggle Switch */
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--gray-300);
+      transition: 0.2s;
+      border-radius: 24px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.2s;
+      border-radius: 50%;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background-color: var(--primary);
+    }
+
+    .toggle input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+    }
+
+    /* Account Section */
+    .account-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+    }
+
+    .account-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .account-details {
+      flex: 1;
+    }
+
+    .account-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .account-email {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* Folder Select */
+    .setting-control {
+      min-width: 200px;
+    }
+
+    .setting-control select {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 14px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .setting-control select option {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    /* Status Messages */
+    .status-message {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      margin-top: 16px;
+    }
+
+    .status-message.success {
+      background: var(--success-light);
+      color: var(--success);
+    }
+
+    .status-message.error {
+      background: var(--error-light);
+      color: var(--error);
+    }
+
+    .status-message.hidden {
+      display: none;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-color);
+      text-align: center;
+    }
+
+    .footer p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Toggle slider in dark mode */
+    .toggle-slider {
+      background-color: var(--border-color);
+    }
+
+    .toggle-slider:before {
+      background-color: var(--bg-primary);
+    }
+
+    [data-theme="dark"] .toggle-slider:before {
+      background-color: white;
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <img src="../icons/icon48.png" alt="Egen">
+    <div>
+      <h1>Egen Meeting Notes</h1>
+      <p>Chrome Extension Settings</p>
+    </div>
+  </header>
+
+  <!-- Appearance Section -->
+  <section class="settings-section">
+    <h2>Appearance</h2>
+
+    <div class="setting-item">
+      <div class="setting-info">
+        <div class="setting-label">Theme</div>
+        <div class="setting-description">Choose how the extension looks to you</div>
+      </div>
+      <div class="theme-selector">
+        <button class="theme-option" data-theme="light">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          Light
+        </button>
+        <button class="theme-option" data-theme="dark">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+          Dark
+        </button>
+        <button class="theme-option" data-theme="system">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          System
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Account Section -->
+  <section class="settings-section">
+    <h2>Account</h2>
+    <div id="accountInfo" class="account-info hidden">
+      <div class="account-avatar" id="accountAvatar">?</div>
+      <div class="account-details">
+        <div class="account-name" id="accountName">Not signed in</div>
+        <div class="account-email" id="accountEmail"></div>
+      </div>
+      <button id="signOutBtn" class="btn btn-secondary">Sign Out</button>
+    </div>
+    <div id="signInPrompt" class="account-info">
+      <p style="flex: 1; color: var(--gray-500);">Sign in to sync your settings</p>
+      <button id="signInBtn" class="btn btn-primary">Sign In</button>
+    </div>
+  </section>
+
+  <!-- Dashboard Settings Link -->
+  <section class="settings-section">
+    <h2>Settings</h2>
+
+    <div class="setting-item">
+      <div class="setting-info">
+        <div class="setting-label">Dashboard Settings</div>
+        <div class="setting-description">Manage your folder settings, Drive connection, Gemini folder, and more in the web dashboard.</div>
+      </div>
+      <a href="https://egen-notes.web.app/settings" target="_blank" class="btn btn-primary">Open Dashboard Settings</a>
+    </div>
+  </section>
+
+  <!-- Data Section -->
+  <section class="settings-section">
+    <h2>Data</h2>
+
+    <div class="setting-item">
+      <div class="setting-info">
+        <div class="setting-label">Clear pending notes</div>
+        <div class="setting-description">Remove all pending notes from the queue</div>
+      </div>
+      <button id="clearPendingBtn" class="btn btn-secondary">Clear</button>
+    </div>
+
+    <div class="setting-item">
+      <div class="setting-info">
+        <div class="setting-label">Reset all settings</div>
+        <div class="setting-description">Reset extension to default settings</div>
+      </div>
+      <button id="resetSettingsBtn" class="btn btn-secondary">Reset</button>
+    </div>
+  </section>
+
+  <!-- Status Message -->
+  <div id="statusMessage" class="status-message hidden">
+    <span id="statusText"></span>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Egen Meeting Notes v1.0.0</p>
+    <p><a href="https://egen.ai" target="_blank">egen.ai</a> · <a href="mailto:support@egen.ai">Support</a></p>
+  </footer>
+
+  <script src="theme.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "Egen Meeting Notes",
+  "version": "1.0.0",
+  "description": "Automatically organize and share your Google Meet meeting notes",
+
+  "permissions": [
+    "identity",
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+
+  "host_permissions": [
+    "https://www.googleapis.com/*",
+    "https://us-central1-karthik-patil-sandbox.cloudfunctions.net/*"
+  ],
+
+  "oauth2": {
+    "client_id": "309681502162-4ilek4lvoeor55jt4d84v5qne15s16tn.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/userinfo.email"
+    ]
+  },
+
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Egen Meeting Notes"
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "options_page": "src/options.html",
+
+  "web_accessible_resources": [
+    {
+      "resources": ["styles/*.css", "icons/*.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

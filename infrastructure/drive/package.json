@@ -1,0 +1,16 @@
+{
+  "name": "egen-meeting-notes-drive-setup",
+  "version": "1.0.0",
+  "description": "Google Drive folder setup for Egen Meeting Notes",
+  "main": "setup-folders.js",
+  "scripts": {
+    "setup": "node setup-folders.js",
+    "verify": "node verify-folders.js"
+  },
+  "dependencies": {
+    "googleapis": "^131.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

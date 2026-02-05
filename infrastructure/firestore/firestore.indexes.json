@@ -1,0 +1,69 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "rules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "priority", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notes_metadata",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "classification.type", "order": "ASCENDING" },
+        { "fieldPath": "meeting.start_time", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notes_metadata",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "classification.client_id", "order": "ASCENDING" },
+        { "fieldPath": "meeting.start_time", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notes_metadata",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "classification.project_id", "order": "ASCENDING" },
+        { "fieldPath": "meeting.start_time", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notes_metadata",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "meeting.organizer", "order": "ASCENDING" },
+        { "fieldPath": "meeting.start_time", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "projects",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "client_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "projects",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,17 @@
+{
+  "name": "egen-feedback-function",
+  "version": "1.0.0",
+  "description": "Cloud Function to record user corrections for the learning system",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx @google-cloud/functions-framework --target=feedback",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.3.0",
+    "@google-cloud/functions-framework": "^3.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

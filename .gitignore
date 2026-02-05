@@ -1,0 +1,72 @@
+# Egen Meeting Notes - Git Ignore
+
+# ===========================================
+# Dependencies
+# ===========================================
+node_modules/
+package-lock.json
+
+# ===========================================
+# Environment and Secrets
+# ===========================================
+.env
+.env.local
+.env.*.local
+
+# Service account keys - NEVER commit
+**/service-account-key.json
+**/*-credentials.json
+**/client_secret*.json
+**/*.key.json
+
+# OAuth secrets
+oauth-*.json
+
+# ===========================================
+# Build and Output
+# ===========================================
+dist/
+build/
+.cache/
+
+# ===========================================
+# IDE and Editor
+# ===========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ===========================================
+# Testing
+# ===========================================
+coverage/
+.nyc_output/
+
+# ===========================================
+# Logs
+# ===========================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===========================================
+# Generated Files
+# ===========================================
+infrastructure/drive/folder-ids.json
+
+# ===========================================
+# Temporary Files
+# ===========================================
+tmp/
+temp/
+*.tmp
+
+# ===========================================
+# OS Files
+# ===========================================
+.DS_Store
+Thumbs.db

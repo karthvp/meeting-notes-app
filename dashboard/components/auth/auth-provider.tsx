@@ -7,7 +7,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
 } from 'firebase/auth';
-import { getFirebaseAuth, getGoogleProvider } from '@/lib/firebase';
+import { getFirebaseAuth, getGoogleProviderWithDriveScope } from '@/lib/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -51,7 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setError(null);
       const auth = getFirebaseAuth();
-      const provider = getGoogleProvider();
+      // Use Drive scope provider so users grant Drive access on first login
+      const provider = getGoogleProviderWithDriveScope();
       const result = await signInWithPopup(auth, provider);
       const email = result.user.email || '';
 

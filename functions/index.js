@@ -18,3 +18,4 @@ require('./setup-drive-folders/index.js');
 require('./get-folders/index.js');
 require('./get-user-settings/index.js');
 require('./import-from-drive/index.js');
+require('./drive-token/index.js');

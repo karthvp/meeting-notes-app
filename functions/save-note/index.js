@@ -22,9 +22,18 @@ const CLIENTS_COLLECTION = 'clients';
 const PROJECTS_COLLECTION = 'projects';
 
 /**
- * Get authenticated Drive client using default credentials
+ * Get authenticated Drive client using user's access token
+ * Falls back to service account if no token provided
  */
-async function getDriveClient() {
+async function getDriveClient(accessToken = null) {
+  if (accessToken) {
+    // Use user's OAuth token for personal Drive access
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    return google.drive({ version: 'v3', auth: oauth2Client });
+  }
+
+  // Fallback to service account (for shared drives or service operations)
   const auth = new google.auth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/drive'],
   });
@@ -48,6 +57,7 @@ async function moveFileToFolder(drive, fileId, targetFolderId) {
   const file = await drive.files.get({
     fileId,
     fields: 'parents',
+    supportsAllDrives: true,
   });
 
   const previousParents = file.data.parents ? file.data.parents.join(',') : '';
@@ -58,6 +68,7 @@ async function moveFileToFolder(drive, fileId, targetFolderId) {
     addParents: targetFolderId,
     removeParents: previousParents,
     fields: 'id, name, webViewLink, parents',
+    supportsAllDrives: true,
   });
 
   return response.data;
@@ -75,6 +86,7 @@ async function getFolderPath(drive, folderId) {
       const folder = await drive.files.get({
         fileId: currentId,
         fields: 'id, name, parents',
+        supportsAllDrives: true,
       });
 
       parts.unshift(folder.data.name);
@@ -106,6 +118,7 @@ async function shareFileWithUsers(drive, fileId, shareWith) {
           emailAddress: share.email,
         },
         sendNotificationEmail: false,
+        supportsAllDrives: true,
       });
       results.push({ email: share.email, success: true });
     } catch (error) {
@@ -148,9 +161,10 @@ async function saveNote(params) {
     tags = [],
     userEmail,
     meeting, // Optional: meeting info when no note exists yet
+    accessToken, // Optional: user's OAuth token for Drive operations
   } = params;
 
-  const drive = await getDriveClient();
+  const drive = await getDriveClient(accessToken);
   let fileUrl = '';
   let folderPath = '';
   let shareResults = [];
@@ -158,16 +172,23 @@ async function saveNote(params) {
   let driveError = null;
 
   // Step 1: Move file to target folder (if targetFolderId provided)
+  console.log('Step 1 check - targetFolderId:', targetFolderId, 'driveFileId:', driveFileId);
   if (targetFolderId && driveFileId) {
+    console.log('Attempting to move file', driveFileId, 'to folder', targetFolderId);
     try {
       const fileData = await moveFileToFolder(drive, driveFileId, targetFolderId);
+      console.log('File moved successfully:', fileData);
       fileUrl = fileData.webViewLink;
       folderPath = await getFolderPath(drive, targetFolderId);
+      console.log('Folder path:', folderPath);
     } catch (error) {
       console.error('Failed to move file:', error.message);
+      console.error('Full error:', JSON.stringify(error, null, 2));
       driveError = error.message;
       // Continue with Firestore update even if Drive operation fails
     }
+  } else {
+    console.log('Skipping file move - missing targetFolderId or driveFileId');
   }
 
   // Step 2: Share with users (if sharedWith provided)
@@ -296,6 +317,17 @@ functions.http('saveNote', async (req, res) => {
   }
 
   try {
+    // Get access token from Authorization header (for Drive operations)
+    let accessToken = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      accessToken = authHeader.substring(7);
+    }
+
+    console.log('=== saveNote called ===');
+    console.log('Has access token:', !!accessToken);
+    console.log('Access token length:', accessToken ? accessToken.length : 0);
+
     const {
       noteId,
       driveFileId,
@@ -306,6 +338,14 @@ functions.http('saveNote', async (req, res) => {
       userEmail,
       meeting,
     } = req.body;
+
+    console.log('Request params:', {
+      noteId,
+      driveFileId,
+      targetFolderId,
+      userEmail,
+      hasClassification: !!classification,
+    });
 
     // Validate required fields
     if (!userEmail) {
@@ -344,6 +384,7 @@ functions.http('saveNote', async (req, res) => {
       tags: tags || [],
       userEmail,
       meeting,
+      accessToken, // Pass user's token for Drive operations
     });
 
     res.status(200).json(result);

@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { getDriveAccessToken } from '@/lib/drive-auth';
 import {
   Note,
   Client,
   Project,
   bulkUpdateNoteClassifications,
+  updateNoteClassification,
 } from '@/lib/firestore';
+import { saveNote } from '@/lib/api';
 import {
   Dialog,
   DialogContent,
@@ -65,7 +68,9 @@ export function BulkCategorizeModal({
     : [];
 
   const handleSave = async () => {
-    if (!user?.email) return;
+    if (!user?.email) {
+      return;
+    }
 
     setSaving(true);
     setProgress(0);
@@ -74,6 +79,10 @@ export function BulkCategorizeModal({
     try {
       const selectedClientObj = clients.find((c) => c.id === selectedClient);
       const selectedProjectObj = projects.find((p) => p.id === selectedProject);
+
+      // Check if we need to move files in Drive
+      const targetFolderId = selectedProjectObj?.drive_folder_id || selectedClientObj?.drive_folder_id;
+      const notesWithDriveFiles = notes.filter(n => n.drive_file_id);
 
       const classification = {
         type: selectedType as any,
@@ -84,25 +93,68 @@ export function BulkCategorizeModal({
         confidence: 1.0, // User confirmed
       };
 
-      const noteIds = notes.map((n) => n.id);
-      const result = await bulkUpdateNoteClassifications(
-        noteIds,
-        classification,
-        user.email
-      );
+      let successCount = 0;
+      let failedCount = 0;
 
-      // Simulate progress (since bulk update doesn't provide real-time progress)
-      for (let i = 0; i <= 100; i += 20) {
-        setProgress(i);
-        await new Promise((r) => setTimeout(r, 100));
+      // If we have Drive files to move and a target folder, get OAuth token
+      if (targetFolderId && notesWithDriveFiles.length > 0) {
+        // Get Drive access token (uses cached/backend token, falls back to popup)
+        const { token: accessToken } = await getDriveAccessToken(user.email);
+
+        if (accessToken) {
+          // Process each note individually to move files
+          for (let i = 0; i < notes.length; i++) {
+            const note = notes[i];
+            setProgress(Math.round((i / notes.length) * 100));
+
+            try {
+              if (note.drive_file_id) {
+                // Use saveNote API to move file and update classification
+                await saveNote({
+                  noteId: note.id,
+                  driveFileId: note.drive_file_id,
+                  targetFolderId: targetFolderId,
+                  classification: {
+                    type: selectedType,
+                    clientId: selectedClient || null,
+                    clientName: selectedClientObj?.name || null,
+                    projectId: selectedProject || null,
+                    projectName: selectedProjectObj?.project_name || null,
+                    confidence: 1.0,
+                  },
+                  userEmail: user.email,
+                  accessToken: accessToken,
+                });
+                successCount++;
+              } else {
+                // No Drive file, just update Firestore
+                await updateNoteClassification(note.id, classification, user.email);
+                successCount++;
+              }
+            } catch (noteError: any) {
+              console.error(`Failed to process note ${note.id}:`, noteError);
+              failedCount++;
+            }
+          }
+        } else {
+          // No access token, fall back to Firestore-only update
+          const noteIds = notes.map((n) => n.id);
+          const result = await bulkUpdateNoteClassifications(noteIds, classification, user.email);
+          successCount = result.success.length;
+          failedCount = result.failed.length;
+        }
+      } else {
+        // No Drive operation needed, use bulk Firestore update
+        const noteIds = notes.map((n) => n.id);
+        const result = await bulkUpdateNoteClassifications(noteIds, classification, user.email);
+        successCount = result.success.length;
+        failedCount = result.failed.length;
       }
 
-      setResults({
-        success: result.success.length,
-        failed: result.failed.length,
-      });
+      setProgress(100);
+      setResults({ success: successCount, failed: failedCount });
 
-      if (result.failed.length === 0) {
+      if (failedCount === 0) {
         setTimeout(() => {
           onSuccess();
           onOpenChange(false);
@@ -110,7 +162,7 @@ export function BulkCategorizeModal({
           setProgress(0);
         }, 1500);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Bulk categorize failed:', error);
       setResults({ success: 0, failed: notes.length });
     } finally {

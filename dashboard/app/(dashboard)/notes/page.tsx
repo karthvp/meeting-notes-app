@@ -2,41 +2,19 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import dynamic from 'next/dynamic';
 import { getNotes, getClients, getProjects, Note } from '@/lib/firestore';
 import { NotesTable } from '@/components/notes/notes-table';
 import { Button } from '@/components/ui/button';
 import { Loader2, Download } from 'lucide-react';
 
-// Dynamic imports for modals to enable code splitting (not needed on initial page load)
-const CategorizeModal = dynamic(
-  () => import('@/components/notes/categorize-modal').then(m => ({ default: m.CategorizeModal })),
-  { ssr: false }
-);
-const ShareModal = dynamic(
-  () => import('@/components/notes/share-modal').then(m => ({ default: m.ShareModal })),
-  { ssr: false }
-);
-const BulkCategorizeModal = dynamic(
-  () => import('@/components/notes/bulk-categorize-modal').then(m => ({ default: m.BulkCategorizeModal })),
-  { ssr: false }
-);
-const BulkShareModal = dynamic(
-  () => import('@/components/notes/bulk-share-modal').then(m => ({ default: m.BulkShareModal })),
-  { ssr: false }
-);
-const BulkTagsModal = dynamic(
-  () => import('@/components/notes/bulk-tags-modal').then(m => ({ default: m.BulkTagsModal })),
-  { ssr: false }
-);
-const ExportModal = dynamic(
-  () => import('@/components/notes/export-modal').then(m => ({ default: m.ExportModal })),
-  { ssr: false }
-);
-const ImportNotesModal = dynamic(
-  () => import('@/components/notes/import-notes-modal').then(m => ({ default: m.ImportNotesModal })),
-  { ssr: false }
-);
+// Direct imports for modals (removed dynamic imports to eliminate caching issues)
+import { CategorizeModal } from '@/components/notes/categorize-modal';
+import { ShareModal } from '@/components/notes/share-modal';
+import { BulkCategorizeModal } from '@/components/notes/bulk-categorize-modal';
+import { BulkShareModal } from '@/components/notes/bulk-share-modal';
+import { BulkTagsModal } from '@/components/notes/bulk-tags-modal';
+import { ExportModal } from '@/components/notes/export-modal';
+import { ImportNotesModal } from '@/components/notes/import-notes-modal';
 
 export default function NotesPage() {
   const [categorizeNote, setCategorizeNote] = useState<Note | null>(null);

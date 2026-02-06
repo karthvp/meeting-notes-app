@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getDriveAccessToken } from '@/lib/drive-auth';
 import {
   Note,
   Client,
@@ -11,6 +12,7 @@ import {
 import {
   classifyNote,
   submitFeedback,
+  saveNote,
   ClassifyResponse,
   getConfidenceLabel,
   getConfidenceColor,
@@ -150,7 +152,9 @@ export function CategorizeModal({
   };
 
   const handleSave = async () => {
-    if (!note || !user?.email) return;
+    if (!note || !user?.email) {
+      return;
+    }
 
     setSaving(true);
     try {
@@ -158,20 +162,74 @@ export function CategorizeModal({
       const selectedClientObj = clients.find((c) => c.id === selectedClient);
       const selectedProjectObj = projects.find((p) => p.id === selectedProject);
 
-      await updateNoteClassification(
-        note.id,
-        {
-          type: selectedType as any,
-          client_id: selectedClient || null,
-          client_name: selectedClientObj?.name || null,
-          project_id: selectedProject || null,
-          project_name: selectedProjectObj?.project_name || null,
-          confidence: usedSuggestion
-            ? aiSuggestion?.classification.confidence || 0.8
-            : 1.0,
-        },
-        user.email
-      );
+      // Check if we need to move the file in Drive
+      const targetFolderId = selectedProjectObj?.drive_folder_id || selectedClientObj?.drive_folder_id;
+      const needsDriveOperation = targetFolderId && note.drive_file_id;
+
+      if (needsDriveOperation) {
+        // Get Drive access token (uses cached/backend token, falls back to popup)
+        const { token: accessToken, error: authError } = await getDriveAccessToken(user.email);
+
+        if (authError === 'popup_closed' || authError === 'popup_blocked') {
+          // User cancelled or popup blocked - just update Firestore
+          console.log('Drive auth skipped, updating Firestore only');
+        } else if (authError) {
+          throw new Error(authError);
+        }
+
+        if (accessToken) {
+
+          await saveNote({
+            noteId: note.id,
+            driveFileId: note.drive_file_id,
+            targetFolderId: targetFolderId,
+            classification: {
+              type: selectedType,
+              clientId: selectedClient || null,
+              clientName: selectedClientObj?.name || null,
+              projectId: selectedProject || null,
+              projectName: selectedProjectObj?.project_name || null,
+              confidence: usedSuggestion
+                ? aiSuggestion?.classification.confidence || 0.8
+                : 1.0,
+            },
+            userEmail: user.email,
+            accessToken: accessToken,
+          });
+        } else {
+          // No access token, just update Firestore
+          await updateNoteClassification(
+            note.id,
+            {
+              type: selectedType as any,
+              client_id: selectedClient || null,
+              client_name: selectedClientObj?.name || null,
+              project_id: selectedProject || null,
+              project_name: selectedProjectObj?.project_name || null,
+              confidence: usedSuggestion
+                ? aiSuggestion?.classification.confidence || 0.8
+                : 1.0,
+            },
+            user.email
+          );
+        }
+      } else {
+        // No Drive operation needed, just update Firestore directly
+        await updateNoteClassification(
+          note.id,
+          {
+            type: selectedType as any,
+            client_id: selectedClient || null,
+            client_name: selectedClientObj?.name || null,
+            project_id: selectedProject || null,
+            project_name: selectedProjectObj?.project_name || null,
+            confidence: usedSuggestion
+              ? aiSuggestion?.classification.confidence || 0.8
+              : 1.0,
+          },
+          user.email
+        );
+      }
 
       // Record feedback if AI suggestion was modified
       if (aiSuggestion && !usedSuggestion) {
@@ -222,7 +280,7 @@ export function CategorizeModal({
 
       onSuccess();
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update note:', error);
     } finally {
       setSaving(false);

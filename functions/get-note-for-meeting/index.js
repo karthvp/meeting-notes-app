@@ -9,6 +9,12 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
 const { google } = require('googleapis');
+const {
+  authenticateRequest,
+  getDriveAccessToken,
+  normalizeEmail,
+} = require('../_shared/auth');
+const { canUserAccessNote } = require('../_shared/note-access');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -18,13 +24,13 @@ const NOTES_COLLECTION = 'notes_metadata';
 const USER_SETTINGS_COLLECTION = 'user_settings';
 
 /**
- * Get authenticated Drive client using default credentials
+ * Get authenticated Drive client using user's OAuth token
  */
-async function getDriveClient() {
-  const auth = new google.auth.GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-  });
-  return google.drive({ version: 'v3', auth });
+function getDriveClient(accessToken) {
+  if (!accessToken) return null;
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+  return google.drive({ version: 'v3', auth: oauth2Client });
 }
 
 /**
@@ -71,8 +77,16 @@ function datesWithinWindow(date1, date2, windowMinutes = 60) {
 function attendeeOverlap(attendees1, attendees2) {
   if (!attendees1?.length || !attendees2?.length) return 0;
 
-  const emails1 = new Set(attendees1.map(a => (a.email || a).toLowerCase()));
-  const emails2 = new Set(attendees2.map(a => (a.email || a).toLowerCase()));
+  const emails1 = new Set(
+    attendees1
+      .map((a) => normalizeEmail(a?.email || a))
+      .filter(Boolean)
+  );
+  const emails2 = new Set(
+    attendees2
+      .map((a) => normalizeEmail(a?.email || a))
+      .filter(Boolean)
+  );
 
   const intersection = [...emails1].filter(e => emails2.has(e));
   const union = new Set([...emails1, ...emails2]);
@@ -263,13 +277,18 @@ async function searchGeminiFolderForNote(drive, geminiFolderId, meeting) {
 /**
  * Find note matching a meeting
  */
-async function findNoteForMeeting(meeting, geminiFolderId = null, userEmail = null) {
+async function findNoteForMeeting(
+  meeting,
+  geminiFolderId = null,
+  userEmail = null,
+  driveAccessToken = null
+) {
   const { title, start_time, end_time, attendees, organizer, description } = meeting;
+  const drive = getDriveClient(driveAccessToken);
 
   // First, check if meeting description contains a direct Drive link
-  if (description) {
+  if (description && drive) {
     try {
-      const drive = await getDriveClient();
       const calendarLinkResult = await checkDescriptionForDriveLink(meeting, drive);
       if (calendarLinkResult) {
         return {
@@ -298,6 +317,9 @@ async function findNoteForMeeting(meeting, geminiFolderId = null, userEmail = nu
 
   for (const doc of snapshot.docs) {
     const note = { id: doc.id, ...doc.data() };
+    if (!canUserAccessNote(note, userEmail)) {
+      continue;
+    }
     let score = 0;
     const reasons = [];
 
@@ -382,9 +404,8 @@ async function findNoteForMeeting(meeting, geminiFolderId = null, userEmail = nu
     effectiveGeminiFolderId = settings?.gemini_notes_folder_id;
   }
 
-  if (effectiveGeminiFolderId) {
+  if (effectiveGeminiFolderId && drive) {
     try {
-      const drive = await getDriveClient();
       const driveResult = await searchGeminiFolderForNote(drive, effectiveGeminiFolderId, meeting);
 
       if (driveResult) {
@@ -408,7 +429,10 @@ functions.http('getNoteForMeeting', async (req, res) => {
   // Set CORS headers
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Drive-Access-Token'
+  );
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
@@ -423,7 +447,16 @@ functions.http('getNoteForMeeting', async (req, res) => {
   }
 
   try {
-    const { meeting, geminiFolderId, userEmail } = req.body;
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
+    }
+
+    const { meeting, geminiFolderId, userEmail: requestUserEmail } = req.body;
+    const userEmail = authContext.email;
+    const driveAccessToken = getDriveAccessToken(req);
 
     if (!meeting) {
       res.status(400).json({ error: 'Missing required field: meeting' });
@@ -435,7 +468,17 @@ functions.http('getNoteForMeeting', async (req, res) => {
       return;
     }
 
-    const result = await findNoteForMeeting(meeting, geminiFolderId, userEmail);
+    if (!requestUserEmail) {
+      res.status(400).json({ error: 'Missing required field: userEmail' });
+      return;
+    }
+
+    const result = await findNoteForMeeting(
+      meeting,
+      geminiFolderId,
+      userEmail,
+      driveAccessToken
+    );
 
     if (result) {
       res.status(200).json({

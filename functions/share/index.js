@@ -12,6 +12,8 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
 const { google } = require('googleapis');
+const { authenticateRequest, isEgenAiEmail } = require('../_shared/auth');
+const { canUserAccessNote } = require('../_shared/note-access');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -30,14 +32,6 @@ async function getDriveClient() {
 }
 
 /**
- * Validate @egen.com email
- */
-function validateEgenEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  return email.toLowerCase().endsWith('@egen.com');
-}
-
-/**
  * Valid permission levels for Google Drive
  */
 const VALID_PERMISSIONS = ['reader', 'commenter', 'writer'];
@@ -53,8 +47,7 @@ async function getDriveFileIdFromNote(noteId) {
     throw new Error('Note not found');
   }
 
-  const noteData = noteDoc.data();
-  return noteData.drive_file_id;
+  return noteDoc.data();
 }
 
 /**
@@ -166,9 +159,17 @@ async function shareNote(noteId, shareWith, userEmail, options = {}) {
 
   // Get Drive file ID
   let driveFileId = options.driveFileId;
+  let noteData = null;
 
   if (!driveFileId && noteId) {
-    driveFileId = await getDriveFileIdFromNote(noteId);
+    noteData = await getDriveFileIdFromNote(noteId);
+    driveFileId = noteData.drive_file_id;
+  }
+
+  if (noteId && noteData && !canUserAccessNote(noteData, userEmail)) {
+    const permissionError = new Error('Not authorized to share this note');
+    permissionError.code = 403;
+    throw permissionError;
   }
 
   if (!driveFileId) {
@@ -262,23 +263,31 @@ functions.http('share', async (req, res) => {
   }
 
   try {
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
+    }
+
     const {
       noteId,
       driveFileId,
       shareWith,
-      userEmail,
+      userEmail: requestUserEmail,
       sendNotifications,
       action,
     } = req.body;
+    const userEmail = authContext.email;
 
     // Validate required fields
-    if (!userEmail) {
+    if (!requestUserEmail) {
       res.status(400).json({ error: 'Missing required field: userEmail' });
       return;
     }
 
-    if (!validateEgenEmail(userEmail)) {
-      res.status(403).json({ error: 'User email must be @egen.com' });
+    if (!isEgenAiEmail(userEmail)) {
+      res.status(403).json({ error: 'User email must be @egen.ai' });
       return;
     }
 
@@ -314,6 +323,11 @@ functions.http('share', async (req, res) => {
 
     if (error.message === 'Note not found') {
       res.status(404).json({ error: error.message });
+      return;
+    }
+
+    if (error.code === 403) {
+      res.status(403).json({ error: error.message });
       return;
     }
 

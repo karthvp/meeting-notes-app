@@ -12,6 +12,12 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
 const { google } = require('googleapis');
+const {
+  authenticateRequest,
+  getDriveAccessToken,
+  isEgenAiEmail,
+  normalizeEmail,
+} = require('../_shared/auth');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -38,15 +44,6 @@ async function getDriveClient(accessToken = null) {
     scopes: ['https://www.googleapis.com/auth/drive'],
   });
   return google.drive({ version: 'v3', auth });
-}
-
-/**
- * Validate @egen.com or @egen.ai email
- */
-function validateEgenEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  const lower = email.toLowerCase();
-  return lower.endsWith('@egen.com') || lower.endsWith('@egen.ai');
 }
 
 /**
@@ -219,6 +216,29 @@ async function saveNote(params) {
   const validSharedWith = (sharedWith || []).filter(s => s && s.email && typeof s.email === 'string' && s.email !== 'undefined');
 
   // Build noteData ensuring no undefined values (Firestore doesn't accept undefined)
+  const normalizedAttendees = (meeting?.attendees || [])
+    .map((attendee) => {
+      if (typeof attendee === 'string') {
+        const email = normalizeEmail(attendee);
+        return email ? { email } : null;
+      }
+
+      if (attendee && typeof attendee === 'object') {
+        const email = normalizeEmail(attendee.email || attendee.value || attendee.address);
+        if (!email) return null;
+
+        return {
+          email,
+          name: attendee.name || null,
+        };
+      }
+
+      return null;
+    })
+    .filter(Boolean);
+
+  const attendeeEmails = normalizedAttendees.map((attendee) => attendee.email);
+
   const noteData = {
     drive_file_id: driveFileId || null,
     drive_file_url: fileUrl || null,
@@ -229,7 +249,8 @@ async function saveNote(params) {
       start_time: meeting.start || null,
       end_time: meeting.end || null,
       organizer: meeting.organizer || null,
-      attendees: (meeting.attendees || []).map(a => a.email || a).filter(Boolean),
+      attendees: normalizedAttendees,
+      attendee_emails: attendeeEmails,
     } : null,
     classification: {
       type: classification?.type || 'uncategorized',
@@ -302,7 +323,10 @@ functions.http('saveNote', async (req, res) => {
   // Set CORS headers
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Drive-Access-Token'
+  );
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
@@ -317,12 +341,15 @@ functions.http('saveNote', async (req, res) => {
   }
 
   try {
-    // Get access token from Authorization header (for Drive operations)
-    let accessToken = null;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      accessToken = authHeader.substring(7);
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
     }
+
+    // Get Google Drive OAuth token from dedicated header/body
+    const accessToken = getDriveAccessToken(req);
 
     console.log('=== saveNote called ===');
     console.log('Has access token:', !!accessToken);
@@ -335,9 +362,11 @@ functions.http('saveNote', async (req, res) => {
       classification,
       sharedWith,
       tags,
-      userEmail,
+      userEmail: requestUserEmail,
       meeting,
     } = req.body;
+
+    const userEmail = authContext.email;
 
     console.log('Request params:', {
       noteId,
@@ -348,13 +377,13 @@ functions.http('saveNote', async (req, res) => {
     });
 
     // Validate required fields
-    if (!userEmail) {
+    if (!requestUserEmail) {
       res.status(400).json({ error: 'Missing required field: userEmail' });
       return;
     }
 
-    if (!validateEgenEmail(userEmail)) {
-      res.status(403).json({ error: 'User email must be @egen.com or @egen.ai' });
+    if (!isEgenAiEmail(userEmail)) {
+      res.status(403).json({ error: 'User email must be @egen.ai' });
       return;
     }
 

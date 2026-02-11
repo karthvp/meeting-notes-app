@@ -6,6 +6,8 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
 const { VertexAI } = require('@google-cloud/vertexai');
+const { authenticateRequest } = require('../_shared/auth');
+const { canUserAccessNote } = require('../_shared/note-access');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -45,6 +47,9 @@ async function findRelevantNotes(query, userEmail, limit = 10) {
 
   for (const doc of snapshot.docs) {
     const note = { id: doc.id, ...doc.data() };
+    if (!canUserAccessNote(note, userEmail)) {
+      continue;
+    }
 
     // Build searchable content
     const title = (note.meeting?.title || note.title || '').toLowerCase();
@@ -81,6 +86,24 @@ async function findRelevantNotes(query, userEmail, limit = 10) {
   return scoredNotes.slice(0, limit).map((s) => s.note);
 }
 
+function toJsDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value.toDate === 'function') {
+    const asDate = value.toDate();
+    return Number.isNaN(asDate.getTime()) ? null : asDate;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (typeof value === 'object' && typeof value._seconds === 'number') {
+    const parsed = new Date(value._seconds * 1000);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 /**
  * Format notes as context for AI
  */
@@ -88,9 +111,8 @@ function formatNotesAsContext(notes) {
   return notes
     .map((note, i) => {
       const title = note.meeting?.title || note.title || 'Untitled';
-      const date = note.meeting?.start_time
-        ? new Date(note.meeting.start_time._seconds * 1000).toLocaleDateString()
-        : 'Unknown date';
+      const meetingDate = toJsDate(note.meeting?.start_time);
+      const date = meetingDate ? meetingDate.toLocaleDateString() : 'Unknown date';
       const client = note.classification?.client_name || 'N/A';
       const project = note.classification?.project_name || 'N/A';
       const summary = note.summary || note.enhanced_analysis?.summary || 'No summary';
@@ -192,6 +214,13 @@ async function getChatHistory(sessionId) {
   return sessionDoc.data().messages || [];
 }
 
+function getScopedSessionId(uid, providedSessionId) {
+  if (providedSessionId && providedSessionId.startsWith(`${uid}_`)) {
+    return providedSessionId;
+  }
+  return `${uid}_${Date.now()}`;
+}
+
 /**
  * HTTP Cloud Function entry point
  */
@@ -214,7 +243,14 @@ functions.http('chat', async (req, res) => {
   }
 
   try {
-    const { query, session_id, user_email, include_history = true } = req.body;
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'user_email' }],
+    });
+    if (!authContext) {
+      return;
+    }
+
+    const { query, session_id, include_history = true } = req.body;
 
     // Validate query
     if (!query || typeof query !== 'string' || query.trim().length < 2) {
@@ -222,13 +258,13 @@ functions.http('chat', async (req, res) => {
       return;
     }
 
-    const sessionId = session_id || `session_${Date.now()}`;
+    const sessionId = getScopedSessionId(authContext.uid, session_id);
 
     // Get conversation history if requested
     const history = include_history ? await getChatHistory(sessionId) : [];
 
     // Find relevant notes
-    const relevantNotes = await findRelevantNotes(query.trim(), user_email);
+    const relevantNotes = await findRelevantNotes(query.trim(), authContext.email);
 
     if (relevantNotes.length === 0) {
       const noDataResponse = "I couldn't find any meeting notes related to your question. Try asking about specific meetings, clients, projects, or action items.";
@@ -259,9 +295,7 @@ functions.http('chat', async (req, res) => {
     const sources = relevantNotes.map((note) => ({
       id: note.id,
       title: note.meeting?.title || note.title || 'Untitled',
-      date: note.meeting?.start_time
-        ? new Date(note.meeting.start_time._seconds * 1000).toISOString()
-        : null,
+      date: toJsDate(note.meeting?.start_time)?.toISOString() || null,
       client: note.classification?.client_name,
     }));
 

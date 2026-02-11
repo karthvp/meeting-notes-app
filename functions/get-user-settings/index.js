@@ -7,21 +7,13 @@
 
 const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
+const { authenticateRequest, isEgenAiEmail } = require('../_shared/auth');
 
 // Initialize Firestore
 const db = new Firestore();
 
 // Collection
 const USER_SETTINGS_COLLECTION = 'user_settings';
-
-/**
- * Validate @egen.com or @egen.ai email
- */
-function validateEgenEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  const lower = email.toLowerCase();
-  return lower.endsWith('@egen.com') || lower.endsWith('@egen.ai');
-}
 
 /**
  * Get user settings from Firestore
@@ -59,15 +51,23 @@ functions.http('getUserSettings', async (req, res) => {
   }
 
   try {
-    const userEmail = req.query.userEmail;
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'query', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
+    }
 
-    if (!userEmail) {
+    const requestedEmail = req.query.userEmail;
+    const userEmail = authContext.email;
+
+    if (!requestedEmail) {
       res.status(400).json({ error: 'Missing required parameter: userEmail' });
       return;
     }
 
-    if (!validateEgenEmail(userEmail)) {
-      res.status(403).json({ error: 'User email must be @egen.com or @egen.ai' });
+    if (!isEgenAiEmail(userEmail)) {
+      res.status(403).json({ error: 'User email must be @egen.ai' });
       return;
     }
 

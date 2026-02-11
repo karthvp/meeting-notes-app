@@ -13,21 +13,17 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
 const { google } = require('googleapis');
+const {
+  authenticateRequest,
+  getDriveAccessToken,
+  isEgenAiEmail,
+} = require('../_shared/auth');
 
 // Initialize Firestore
 const db = new Firestore();
 
 // Collections
 const NOTES_COLLECTION = 'notes_metadata';
-
-/**
- * Validate @egen.com or @egen.ai email
- */
-function validateEgenEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  const lower = email.toLowerCase();
-  return lower.endsWith('@egen.com') || lower.endsWith('@egen.ai');
-}
 
 /**
  * Get authenticated Drive client using user's access token
@@ -232,7 +228,10 @@ functions.http('importFromDrive', async (req, res) => {
   // Set CORS headers
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Drive-Access-Token'
+  );
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
@@ -247,25 +246,26 @@ functions.http('importFromDrive', async (req, res) => {
   }
 
   try {
-    // Get access token from Authorization header (preferred) or body (fallback)
-    let accessToken = null;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      accessToken = authHeader.substring(7);
-    } else {
-      // Fallback to body for backward compatibility
-      accessToken = req.body.accessToken;
-    }
-
-    const { userEmail, folderId } = req.body;
-
-    // Validate required fields
-    if (!accessToken) {
-      res.status(400).json({ error: 'Missing required field: accessToken (use Authorization header or body)' });
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'userEmail' }],
+    });
+    if (!authContext) {
       return;
     }
 
-    if (!userEmail) {
+    const accessToken = getDriveAccessToken(req);
+    const { userEmail: requestUserEmail, folderId } = req.body;
+    const userEmail = authContext.email;
+
+    // Validate required fields
+    if (!accessToken) {
+      res.status(400).json({
+        error: 'Missing required field: accessToken (use X-Drive-Access-Token header or body)',
+      });
+      return;
+    }
+
+    if (!requestUserEmail) {
       res.status(400).json({ error: 'Missing required field: userEmail' });
       return;
     }
@@ -275,8 +275,8 @@ functions.http('importFromDrive', async (req, res) => {
       return;
     }
 
-    if (!validateEgenEmail(userEmail)) {
-      res.status(403).json({ error: 'User email must be @egen.com or @egen.ai' });
+    if (!isEgenAiEmail(userEmail)) {
+      res.status(403).json({ error: 'User email must be @egen.ai' });
       return;
     }
 

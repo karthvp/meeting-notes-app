@@ -5,6 +5,8 @@
 
 const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
+const { authenticateRequest } = require('../_shared/auth');
+const { canUserAccessNote, listContainsEmail } = require('../_shared/note-access');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -37,6 +39,11 @@ async function searchNotes(query, options = {}) {
   for (const doc of snapshot.docs) {
     const note = { id: doc.id, ...doc.data() };
 
+    // Enforce per-user access filter
+    if (!canUserAccessNote(note, userEmail)) {
+      continue;
+    }
+
     // Build searchable text
     const searchableFields = [
       note.meeting?.title || note.title || '',
@@ -64,9 +71,9 @@ async function searchNotes(query, options = {}) {
     if (filters.type && note.classification?.type !== filters.type) continue;
     if (filters.clientId && note.classification?.client_id !== filters.clientId) continue;
     if (filters.attendeeEmail) {
-      const hasAttendee = (note.meeting?.attendees || []).some(
-        a => a.email?.toLowerCase() === filters.attendeeEmail.toLowerCase()
-      );
+      const hasAttendee =
+        listContainsEmail(note.meeting?.attendees, filters.attendeeEmail) ||
+        listContainsEmail(note.meeting?.attendee_emails, filters.attendeeEmail);
       if (!hasAttendee) continue;
     }
     if (filters.dateFrom) {
@@ -152,6 +159,16 @@ functions.http('search', async (req, res) => {
   }
 
   try {
+    const authContext = await authenticateRequest(req, res, {
+      emailFields:
+        req.method === 'GET'
+          ? [{ location: 'query', key: 'user_email' }]
+          : [{ location: 'body', key: 'user_email' }],
+    });
+    if (!authContext) {
+      return;
+    }
+
     // Support both GET and POST
     const params = req.method === 'GET' ? req.query : req.body;
     const {
@@ -178,7 +195,7 @@ functions.http('search', async (req, res) => {
     }
 
     const options = {
-      userEmail: user_email,
+      userEmail: authContext.email,
       limit: parseInt(limit, 10) || 50,
       includeContent: include_content === true || include_content === 'true',
       filters: {

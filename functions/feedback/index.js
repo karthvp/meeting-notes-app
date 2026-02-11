@@ -12,6 +12,8 @@
 
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
+const { authenticateRequest, isEgenAiEmail } = require('../_shared/auth');
+const { canUserAccessNote } = require('../_shared/note-access');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -21,14 +23,6 @@ const FEEDBACK_COLLECTION = 'feedback';
 const RULES_COLLECTION = 'rules';
 const USER_PREFS_COLLECTION = 'user_preferences';
 const NOTES_COLLECTION = 'notes_metadata';
-
-/**
- * Validate @egen.com email
- */
-function validateEgenEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  return email.toLowerCase().endsWith('@egen.com');
-}
 
 /**
  * Determine the type of correction made
@@ -334,6 +328,21 @@ async function recordFeedback(params) {
   };
 }
 
+async function assertUserCanAccessNote(noteId, userEmail) {
+  if (!noteId) return;
+  const noteRef = db.collection(NOTES_COLLECTION).doc(noteId);
+  const noteDoc = await noteRef.get();
+  if (!noteDoc.exists) {
+    throw new Error('Note not found');
+  }
+
+  if (!canUserAccessNote(noteDoc.data(), userEmail)) {
+    const permissionError = new Error('Not authorized for this note');
+    permissionError.code = 403;
+    throw permissionError;
+  }
+}
+
 /**
  * HTTP Cloud Function entry point
  */
@@ -356,25 +365,30 @@ functions.http('feedback', async (req, res) => {
   }
 
   try {
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
+    }
+
     const {
       noteId,
       originalClassification,
       correctedClassification,
       meeting,
-      userEmail,
+      userEmail: requestUserEmail,
       user, // Legacy field name
     } = req.body;
 
-    const email = userEmail || user;
-
     // Validate required fields
-    if (!email) {
+    if (!requestUserEmail && !user) {
       res.status(400).json({ error: 'Missing required field: userEmail' });
       return;
     }
 
-    if (!validateEgenEmail(email)) {
-      res.status(403).json({ error: 'User email must be @egen.com' });
+    if (!isEgenAiEmail(authContext.email)) {
+      res.status(403).json({ error: 'User email must be @egen.ai' });
       return;
     }
 
@@ -388,19 +402,32 @@ functions.http('feedback', async (req, res) => {
       return;
     }
 
+    await assertUserCanAccessNote(noteId, authContext.email);
+
     // Record feedback
     const result = await recordFeedback({
       noteId,
       originalClassification,
       correctedClassification,
       meeting,
-      userEmail: email,
+      userEmail: authContext.email,
     });
 
     res.status(200).json(result);
 
   } catch (error) {
     console.error('Feedback error:', error);
+
+    if (error.code === 403) {
+      res.status(403).json({ error: error.message });
+      return;
+    }
+
+    if (error.message === 'Note not found') {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+
     res.status(500).json({
       error: 'Internal server error',
       message: error.message,

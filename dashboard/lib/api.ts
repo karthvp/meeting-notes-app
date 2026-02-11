@@ -172,7 +172,7 @@ export interface SaveNoteResponse {
 
 /**
  * Call the /save-note Cloud Function to save and file a note
- * If accessToken is provided, it's sent in the Authorization header for Drive operations
+ * If accessToken is provided, it's sent in X-Drive-Access-Token for Drive operations
  */
 export async function saveNote(request: SaveNoteRequest): Promise<SaveNoteResponse> {
   const { accessToken, ...bodyParams } = request;

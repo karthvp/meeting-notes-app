@@ -417,7 +417,7 @@ export function RuleFormModal({
               <Label>Auto-Share With</Label>
               <div className="flex gap-2">
                 <Input
-                  placeholder="email@egen.com"
+                  placeholder="email@egen.ai"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   onKeyDown={(e) => {

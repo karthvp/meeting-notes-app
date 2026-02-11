@@ -27,9 +27,9 @@ interface BulkShareModalProps {
 }
 
 const SUGGESTED_TEAM = [
-  'team@egen.com',
-  'engineering@egen.com',
-  'sales@egen.com',
+  'team@egen.ai',
+  'engineering@egen.ai',
+  'sales@egen.ai',
 ];
 
 export function BulkShareModal({
@@ -204,7 +204,7 @@ export function BulkShareModal({
                 <Label>Share with</Label>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="email@egen.com"
+                    placeholder="email@egen.ai"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     onKeyDown={(e) => {

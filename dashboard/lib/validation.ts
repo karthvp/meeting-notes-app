@@ -5,12 +5,12 @@
 /**
  * Check if an email is a valid Egen domain email
  * @param email - Email address to validate
- * @returns true if email ends with @egen.ai or @egen.com
+ * @returns true if email ends with @egen.ai
  */
 export function isEgenEmail(email: string | null | undefined): boolean {
   if (!email || typeof email !== 'string') return false;
   const lower = email.toLowerCase().trim();
-  return lower.endsWith('@egen.ai') || lower.endsWith('@egen.com');
+  return lower.endsWith('@egen.ai');
 }
 
 /**

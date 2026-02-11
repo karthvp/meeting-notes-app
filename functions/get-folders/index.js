@@ -7,6 +7,7 @@
 
 const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
+const { authenticateRequest } = require('../_shared/auth');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -115,6 +116,11 @@ functions.http('getFolders', async (req, res) => {
   }
 
   try {
+    const authContext = await authenticateRequest(req, res);
+    if (!authContext) {
+      return;
+    }
+
     const folders = await getAllFolders();
 
     // Add Cache-Control header for GET requests (5 minutes)

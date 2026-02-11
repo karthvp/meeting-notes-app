@@ -8,6 +8,11 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
 const { google } = require('googleapis');
+const {
+  authenticateRequest,
+  getDriveAccessToken,
+  isEgenAiEmail,
+} = require('../_shared/auth');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -20,17 +25,10 @@ const FOLDER_CONFIG_COLLECTION = 'folder_config';
 /**
  * Get authenticated Drive client
  */
-async function getDriveClient(accessToken = null) {
-  if (accessToken) {
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
-    return google.drive({ version: 'v3', auth: oauth2Client });
-  }
-
-  const auth = new google.auth.GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/drive'],
-  });
-  return google.drive({ version: 'v3', auth });
+async function getDriveClient(accessToken) {
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+  return google.drive({ version: 'v3', auth: oauth2Client });
 }
 
 /**
@@ -185,7 +183,10 @@ functions.http('setupDriveFolders', async (req, res) => {
   // Set CORS headers
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Drive-Access-Token'
+  );
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
@@ -200,10 +201,31 @@ functions.http('setupDriveFolders', async (req, res) => {
   }
 
   try {
-    const { userEmail, accessToken } = req.body;
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
+    }
 
-    if (!userEmail) {
+    const { userEmail: requestUserEmail } = req.body;
+    const userEmail = authContext.email;
+    const accessToken = getDriveAccessToken(req);
+
+    if (!requestUserEmail) {
       res.status(400).json({ error: 'Missing required field: userEmail' });
+      return;
+    }
+
+    if (!isEgenAiEmail(userEmail)) {
+      res.status(403).json({ error: 'User email must be @egen.ai' });
+      return;
+    }
+
+    if (!accessToken) {
+      res.status(400).json({
+        error: 'Missing required field: accessToken (use X-Drive-Access-Token header or body)',
+      });
       return;
     }
 

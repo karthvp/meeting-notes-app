@@ -6,6 +6,8 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
 const { google } = require('googleapis');
+const { authenticateRequest } = require('../_shared/auth');
+const { canUserAccessNote } = require('../_shared/note-access');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -94,6 +96,20 @@ async function linkTaskToActionItem(noteId, actionItemId, googleTaskId) {
   });
 }
 
+async function assertUserCanAccessNote(noteId, userEmail) {
+  const noteRef = db.collection(NOTES_COLLECTION).doc(noteId);
+  const noteDoc = await noteRef.get();
+  if (!noteDoc.exists) {
+    throw new Error('Note not found');
+  }
+
+  if (!canUserAccessNote(noteDoc.data(), userEmail)) {
+    const error = new Error('Not authorized for this note');
+    error.code = 403;
+    throw error;
+  }
+}
+
 /**
  * HTTP Cloud Function entry point
  */
@@ -116,6 +132,16 @@ functions.http('createTask', async (req, res) => {
   }
 
   try {
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [
+        { location: 'body', key: 'userEmail' },
+        { location: 'body', key: 'user_email' },
+      ],
+    });
+    if (!authContext) {
+      return;
+    }
+
     const { noteId, actionItemId, title, notes, due, userEmail } = req.body;
 
     // Validate required fields
@@ -132,11 +158,14 @@ functions.http('createTask', async (req, res) => {
       res.status(400).json({ error: 'Missing userEmail' });
       return;
     }
+    const effectiveEmail = authContext.email;
+
+    await assertUserCanAccessNote(noteId, effectiveEmail);
 
     // Get Tasks API client
     let tasksClient;
     try {
-      tasksClient = await getTasksClient(email);
+      tasksClient = await getTasksClient(effectiveEmail);
     } catch (authError) {
       console.error('Authentication error:', authError);
       res.status(401).json({
@@ -163,6 +192,23 @@ functions.http('createTask', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating task:', error);
+
+    if (error.message === 'Note not found') {
+      res.status(404).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
+    if (error.code === 403) {
+      res.status(403).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to create Google Task',

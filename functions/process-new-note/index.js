@@ -297,6 +297,9 @@ async function saveNoteToFirestore(fileId, meetingData, classification, autoFile
       description: meetingData.description,
       organizer: meetingData.organizer,
       attendees: meetingData.attendees,
+      attendee_emails: (meetingData.attendees || [])
+        .map((a) => (typeof a === 'string' ? a : a?.email))
+        .filter(Boolean),
       start_time: meetingData.meetingDate ? new Date(meetingData.meetingDate) : null,
     },
 

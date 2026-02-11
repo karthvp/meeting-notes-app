@@ -10,6 +10,8 @@
 
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
+const { authenticateRequest, isEgenAiEmail } = require('../_shared/auth');
+const { canUserAccessNote } = require('../_shared/note-access');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -19,19 +21,11 @@ const NOTES_COLLECTION = 'notes_metadata';
 const AUDIT_COLLECTION = 'audit_log';
 
 /**
- * Validate email domain (must be @egen.com)
- */
-function validateEgenEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  return email.toLowerCase().endsWith('@egen.com');
-}
-
-/**
- * Validate array of @egen.com emails
+ * Validate array of @egen.ai emails
  */
 function validateEgenEmails(emails) {
   if (!Array.isArray(emails)) return false;
-  return emails.every(validateEgenEmail);
+  return emails.every(isEgenAiEmail);
 }
 
 /**
@@ -134,9 +128,9 @@ async function updateSharing(noteId, sharedWith, userEmail) {
     throw new Error('Note not found');
   }
 
-  // Validate all emails are @egen.com
+  // Validate all emails are @egen.ai
   if (!validateEgenEmails(sharedWith)) {
-    throw new Error('All emails must be @egen.com addresses');
+    throw new Error('All emails must be @egen.ai addresses');
   }
 
   const currentData = noteDoc.data();
@@ -179,6 +173,20 @@ async function getNote(noteId) {
   };
 }
 
+async function assertUserCanAccessNote(noteId, userEmail) {
+  const noteRef = db.collection(NOTES_COLLECTION).doc(noteId);
+  const noteDoc = await noteRef.get();
+  if (!noteDoc.exists) {
+    throw new Error('Note not found');
+  }
+
+  if (!canUserAccessNote(noteDoc.data(), userEmail)) {
+    const error = new Error('Not authorized for this note');
+    error.code = 403;
+    throw error;
+  }
+}
+
 /**
  * HTTP Cloud Function entry point
  */
@@ -195,6 +203,16 @@ functions.http('updateNote', async (req, res) => {
   }
 
   try {
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [
+        { location: 'body', key: 'userEmail' },
+        { location: 'query', key: 'userEmail' },
+      ],
+    });
+    if (!authContext) {
+      return;
+    }
+
     // GET - Retrieve note
     if (req.method === 'GET') {
       const noteId = req.query.id;
@@ -203,6 +221,7 @@ functions.http('updateNote', async (req, res) => {
         return;
       }
 
+      await assertUserCanAccessNote(noteId, authContext.email);
       const note = await getNote(noteId);
       res.status(200).json(note);
       return;
@@ -214,7 +233,14 @@ functions.http('updateNote', async (req, res) => {
       return;
     }
 
-    const { noteId, action, classification, sharedWith, userEmail } = req.body;
+    const {
+      noteId,
+      action,
+      classification,
+      sharedWith,
+      userEmail: requestUserEmail,
+    } = req.body;
+    const userEmail = authContext.email;
 
     // Validate required fields
     if (!noteId) {
@@ -222,15 +248,17 @@ functions.http('updateNote', async (req, res) => {
       return;
     }
 
-    if (!userEmail) {
+    if (!requestUserEmail) {
       res.status(400).json({ error: 'Missing required field: userEmail' });
       return;
     }
 
-    if (!validateEgenEmail(userEmail)) {
-      res.status(403).json({ error: 'User email must be @egen.com' });
+    if (!isEgenAiEmail(userEmail)) {
+      res.status(403).json({ error: 'User email must be @egen.ai' });
       return;
     }
+
+    await assertUserCanAccessNote(noteId, userEmail);
 
     // Determine action
     const updateAction = action || 'update';
@@ -284,6 +312,11 @@ functions.http('updateNote', async (req, res) => {
 
     if (error.message === 'Note not found') {
       res.status(404).json({ error: error.message });
+      return;
+    }
+
+    if (error.code === 403) {
+      res.status(403).json({ error: error.message });
       return;
     }
 

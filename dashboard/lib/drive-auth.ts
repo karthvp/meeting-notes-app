@@ -7,6 +7,8 @@
  * - Falls back to OAuth popup only when necessary
  */
 
+import { getFirebaseAuth } from './firebase';
+
 const DRIVE_TOKEN_API = process.env.NEXT_PUBLIC_DRIVE_TOKEN_API_URL ||
   'https://us-central1-karthik-patil-sandbox.cloudfunctions.net/driveToken';
 
@@ -17,6 +19,18 @@ let cachedToken: { token: string; expiresAt: number } | null = null;
 
 // Flag to track if GIS script is loaded
 let gisLoaded = false;
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const auth = getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('AUTH_REQUIRED');
+  }
+  const token = await user.getIdToken();
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
 
 /**
  * Load Google Identity Services script
@@ -78,10 +92,11 @@ async function exchangeCodeForTokens(
   userEmail: string
 ): Promise<{ access_token: string; expires_at: number } | null> {
   try {
+    const authHeaders = await getAuthHeaders();
     // GIS popup mode uses 'postmessage' as redirect URI
     const response = await fetch(`${DRIVE_TOKEN_API}?action=exchange`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({
         code,
         userEmail,
@@ -111,9 +126,10 @@ async function exchangeCodeForTokens(
  */
 export async function hasStoredDriveToken(userEmail: string): Promise<boolean> {
   try {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(`${DRIVE_TOKEN_API}?action=check`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ userEmail }),
     });
 
@@ -132,9 +148,10 @@ export async function hasStoredDriveToken(userEmail: string): Promise<boolean> {
  */
 async function refreshAccessToken(userEmail: string): Promise<string | null> {
   try {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(`${DRIVE_TOKEN_API}?action=refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ userEmail }),
     });
 
@@ -167,9 +184,10 @@ async function refreshAccessToken(userEmail: string): Promise<string | null> {
  */
 async function storeRefreshToken(userEmail: string, refreshToken: string): Promise<boolean> {
   try {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(`${DRIVE_TOKEN_API}?action=store`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ userEmail, refreshToken }),
     });
 
@@ -257,9 +275,10 @@ export async function revokeDriveAccess(userEmail: string): Promise<boolean> {
   clearCachedToken();
 
   try {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(`${DRIVE_TOKEN_API}?action=revoke`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ userEmail }),
     });
 

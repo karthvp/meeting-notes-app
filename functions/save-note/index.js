@@ -238,6 +238,14 @@ async function saveNote(params) {
     .filter(Boolean);
 
   const attendeeEmails = normalizedAttendees.map((attendee) => attendee.email);
+  const parsedStartTime =
+    meeting?.start && !Number.isNaN(new Date(meeting.start).getTime())
+      ? new Date(meeting.start)
+      : meeting?.start || null;
+  const parsedEndTime =
+    meeting?.end && !Number.isNaN(new Date(meeting.end).getTime())
+      ? new Date(meeting.end)
+      : meeting?.end || null;
 
   const noteData = {
     drive_file_id: driveFileId || null,
@@ -246,8 +254,8 @@ async function saveNote(params) {
     meeting: meeting ? {
       title: meeting.title || null,
       calendar_event_id: meeting.id || null,
-      start_time: meeting.start || null,
-      end_time: meeting.end || null,
+      start_time: parsedStartTime,
+      end_time: parsedEndTime,
       organizer: meeting.organizer || null,
       attendees: normalizedAttendees,
       attendee_emails: attendeeEmails,

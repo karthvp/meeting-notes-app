@@ -10,6 +10,7 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
 const { google } = require('googleapis');
+const { authenticateRequest, isEgenAiEmail } = require('../_shared/auth');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -30,15 +31,6 @@ function getOAuth2Client() {
     OAUTH_CLIENT_ID,
     OAUTH_CLIENT_SECRET
   );
-}
-
-/**
- * Validate @egen.com or @egen.ai email
- */
-function validateEgenEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  const lower = email.toLowerCase();
-  return lower.endsWith('@egen.com') || lower.endsWith('@egen.ai');
 }
 
 /**
@@ -146,10 +138,17 @@ functions.http('driveToken', async (req, res) => {
   try {
     const { action } = req.query;
     const { userEmail, code, redirectUri, refreshToken } = req.body || {};
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
+    }
 
-    // Validate user email for all actions
-    if (action !== 'check' && !validateEgenEmail(userEmail)) {
-      res.status(403).json({ error: 'User email must be @egen.com or @egen.ai' });
+    const effectiveUserEmail = userEmail || authContext.email;
+
+    if (!effectiveUserEmail || !isEgenAiEmail(effectiveUserEmail)) {
+      res.status(403).json({ error: 'User email must be @egen.ai' });
       return;
     }
 
@@ -165,7 +164,7 @@ functions.http('driveToken', async (req, res) => {
           const tokens = await exchangeCodeForTokens(code, redirectUri);
 
           if (tokens.refresh_token) {
-            await storeToken(userEmail, tokens.refresh_token);
+            await storeToken(effectiveUserEmail, tokens.refresh_token);
           }
 
           res.status(200).json({
@@ -187,18 +186,13 @@ functions.http('driveToken', async (req, res) => {
           return;
         }
 
-        await storeToken(userEmail, refreshToken);
+        await storeToken(effectiveUserEmail, refreshToken);
         res.status(200).json({ success: true });
         break;
 
       case 'refresh':
         // Get fresh access token using stored refresh token
-        if (!userEmail) {
-          res.status(400).json({ error: 'Missing userEmail' });
-          return;
-        }
-
-        const result = await getAccessToken(userEmail);
+        const result = await getAccessToken(effectiveUserEmail);
 
         if (result.error) {
           res.status(result.error === 'no_token' ? 404 : 400).json(result);
@@ -209,23 +203,13 @@ functions.http('driveToken', async (req, res) => {
 
       case 'check':
         // Check if user has stored token
-        if (!userEmail || !validateEgenEmail(userEmail)) {
-          res.status(200).json({ hasToken: false });
-          return;
-        }
-
-        const hasToken = await hasStoredToken(userEmail);
+        const hasToken = await hasStoredToken(effectiveUserEmail);
         res.status(200).json({ hasToken });
         break;
 
       case 'revoke':
         // Delete stored token (user wants to disconnect)
-        if (!userEmail) {
-          res.status(400).json({ error: 'Missing userEmail' });
-          return;
-        }
-
-        await db.collection(TOKENS_COLLECTION).doc(userEmail).delete();
+        await db.collection(TOKENS_COLLECTION).doc(effectiveUserEmail).delete();
         res.status(200).json({ success: true });
         break;
 

@@ -161,9 +161,9 @@ async function shareNote(noteId, shareWith, userEmail, options = {}) {
   let driveFileId = options.driveFileId;
   let noteData = null;
 
-  if (!driveFileId && noteId) {
+  if (noteId) {
     noteData = await getDriveFileIdFromNote(noteId);
-    driveFileId = noteData.drive_file_id;
+    driveFileId = driveFileId || noteData.drive_file_id;
   }
 
   if (noteId && noteData && !canUserAccessNote(noteData, userEmail)) {

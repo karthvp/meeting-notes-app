@@ -5,6 +5,11 @@
 
 const functions = require('@google-cloud/functions-framework');
 const { Firestore, FieldValue } = require('@google-cloud/firestore');
+const {
+  authenticateRequest,
+  getDriveAccessToken,
+  isEgenAiEmail,
+} = require('../_shared/auth');
 
 const db = new Firestore();
 const USER_DRIVE_CONFIGS_COLLECTION = 'user_drive_configs';
@@ -18,7 +23,10 @@ functions.http('registerDriveWebhook', async (req, res) => {
   // CORS headers
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Drive-Access-Token'
+  );
 
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
@@ -26,7 +34,16 @@ functions.http('registerDriveWebhook', async (req, res) => {
   }
 
   try {
-    const { folderId, folderName, accessToken, userEmail } = req.body;
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
+    }
+
+    const { folderId, folderName, userEmail: requestUserEmail } = req.body;
+    const accessToken = getDriveAccessToken(req);
+    const userEmail = authContext.email;
 
     console.log('Webhook registration request:', {
       folderId,
@@ -36,9 +53,16 @@ functions.http('registerDriveWebhook', async (req, res) => {
       accessTokenLength: accessToken?.length,
     });
 
-    if (!folderId || !accessToken || !userEmail) {
+    if (!folderId || !accessToken || !requestUserEmail) {
       res.status(400).json({
         error: 'Missing required fields: folderId, accessToken, userEmail',
+      });
+      return;
+    }
+
+    if (!isEgenAiEmail(userEmail)) {
+      res.status(403).json({
+        error: 'User email must be @egen.ai',
       });
       return;
     }
@@ -157,7 +181,10 @@ functions.http('unregisterDriveWebhook', async (req, res) => {
   // CORS headers
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Drive-Access-Token'
+  );
 
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
@@ -165,9 +192,18 @@ functions.http('unregisterDriveWebhook', async (req, res) => {
   }
 
   try {
-    const { accessToken, userEmail } = req.body;
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
+    }
 
-    if (!accessToken || !userEmail) {
+    const { userEmail: requestUserEmail } = req.body;
+    const accessToken = getDriveAccessToken(req);
+    const userEmail = authContext.email;
+
+    if (!accessToken || !requestUserEmail) {
       res.status(400).json({
         error: 'Missing required fields: accessToken, userEmail',
       });
@@ -246,9 +282,16 @@ functions.http('getDriveWebhookConfig', async (req, res) => {
   }
 
   try {
-    const userEmail = req.query.userEmail;
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'query', key: 'userEmail' }],
+    });
+    if (!authContext) {
+      return;
+    }
 
-    if (!userEmail) {
+    const userEmail = authContext.email;
+
+    if (!req.query.userEmail) {
       res.status(400).json({ error: 'Missing required query param: userEmail' });
       return;
     }

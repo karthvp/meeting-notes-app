@@ -44,7 +44,9 @@ service cloud.firestore {
       allow read: if isEgenUser() && (
         // User is the organizer
         resource.data.meeting.organizer == userEmail() ||
-        // User is in the attendees list
+        // User is in normalized attendee emails list
+        userEmail() in resource.data.meeting.attendee_emails ||
+        // Backward compatibility: attendee list stored as plain string emails
         userEmail() in resource.data.meeting.attendees ||
         // User is in the sharing list
         userEmail() in resource.data.sharing.shared_with

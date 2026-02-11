@@ -14,6 +14,24 @@ const db = new Firestore();
 // Notes metadata collection
 const NOTES_COLLECTION = 'notes_metadata';
 
+function toJsDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value.toDate === 'function') {
+    const dateValue = value.toDate();
+    return Number.isNaN(dateValue.getTime()) ? null : dateValue;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const dateValue = new Date(value);
+    return Number.isNaN(dateValue.getTime()) ? null : dateValue;
+  }
+  if (typeof value === 'object' && typeof value._seconds === 'number') {
+    const dateValue = new Date(value._seconds * 1000);
+    return Number.isNaN(dateValue.getTime()) ? null : dateValue;
+  }
+  return null;
+}
+
 /**
  * Search notes by query string
  * Searches across title, summary, content, and action items
@@ -77,11 +95,11 @@ async function searchNotes(query, options = {}) {
       if (!hasAttendee) continue;
     }
     if (filters.dateFrom) {
-      const noteDate = note.meeting?.start_time?.toDate?.() || note.created_at?.toDate?.();
+      const noteDate = toJsDate(note.meeting?.start_time) || toJsDate(note.created_at);
       if (noteDate && noteDate < new Date(filters.dateFrom)) continue;
     }
     if (filters.dateTo) {
-      const noteDate = note.meeting?.start_time?.toDate?.() || note.created_at?.toDate?.();
+      const noteDate = toJsDate(note.meeting?.start_time) || toJsDate(note.created_at);
       if (noteDate && noteDate > new Date(filters.dateTo)) continue;
     }
 
@@ -181,7 +199,6 @@ functions.http('search', async (req, res) => {
       attendee_email,
       date_from,
       date_to,
-      user_email,
     } = params;
 
     // Validate query

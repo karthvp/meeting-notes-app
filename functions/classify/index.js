@@ -11,6 +11,7 @@
 const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
 const { VertexAI } = require('@google-cloud/vertexai');
+const { authenticateRequest } = require('../_shared/auth');
 
 // Configuration
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'karthik-patil-sandbox';
@@ -63,10 +64,10 @@ function extractDomains(emails) {
 }
 
 /**
- * Check if all attendees are internal (egen.com)
+ * Check if all attendees are internal (egen.ai)
  */
 function areAllAttendeesInternal(attendees) {
-  return attendees.every(a => a.email?.toLowerCase().endsWith('@egen.com'));
+  return attendees.every(a => a.email?.toLowerCase().endsWith('@egen.ai'));
 }
 
 /**
@@ -796,7 +797,7 @@ async function classify(meeting, noteFileId, noteContent = null) {
 
   // Add internal attendees to share suggestions
   const internalAttendees = attendees
-    .filter(a => a.email?.endsWith('@egen.com'))
+    .filter(a => a.email?.endsWith('@egen.ai'))
     .map(a => ({ email: a.email, role: 'attendee', name: a.name }));
   result.suggested_actions.share_with = internalAttendees;
 
@@ -864,6 +865,11 @@ functions.http('classify', async (req, res) => {
   }
 
   try {
+    const authContext = await authenticateRequest(req, res);
+    if (!authContext) {
+      return;
+    }
+
     const { meeting, note_file_id, note_content } = req.body;
 
     // Validate request

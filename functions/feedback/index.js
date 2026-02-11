@@ -78,8 +78,9 @@ async function updateUserPattern(userEmail, meeting, correctedClassification) {
 
     // Use external attendee domains as pattern
     const externalDomains = meeting.attendees
-      ?.filter(a => !a.email?.endsWith('@egen.com'))
-      .map(a => a.email?.split('@')[1])
+      ?.map((a) => (typeof a === 'string' ? a : a?.email))
+      .filter((email) => !!email && !email.endsWith('@egen.ai'))
+      .map((email) => email.split('@')[1])
       .filter(Boolean);
 
     if (externalDomains && externalDomains.length > 0) {
@@ -289,7 +290,9 @@ async function recordFeedback(params) {
     meeting: meeting
       ? {
           title: meeting.title,
-          attendees: meeting.attendees?.map(a => a.email) || [],
+          attendees:
+            meeting.attendees?.map((a) => (typeof a === 'string' ? a : a?.email)).filter(Boolean) ||
+            [],
         }
       : null,
     userEmail,

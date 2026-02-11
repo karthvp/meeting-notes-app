@@ -6,6 +6,7 @@ import type {
   Classification,
   Attendee,
 } from './firestore';
+import { getFirebaseAuth } from './firebase';
 
 // API Base URL - configured via environment variable
 const API_BASE_URL =
@@ -27,6 +28,36 @@ export class ApiError extends Error {
   }
 }
 
+async function getAuthToken(): Promise<string> {
+  const auth = getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user) {
+    throw new ApiError('You must be signed in to use the API', 401, 'AUTH_REQUIRED');
+  }
+  return user.getIdToken();
+}
+
+function headersToObject(headers?: HeadersInit): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries());
+  }
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+  return { ...headers };
+}
+
+async function buildApiHeaders(headers?: HeadersInit): Promise<Record<string, string>> {
+  const token = await getAuthToken();
+  const provided = headersToObject(headers);
+  return {
+    'Content-Type': 'application/json',
+    ...provided,
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 /**
  * Generic fetch wrapper with error handling
  */
@@ -35,13 +66,11 @@ async function apiFetch<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}/${endpoint}`;
+  const headers = await buildApiHeaders(options.headers);
 
   const response = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   });
 
   // Check content type before parsing
@@ -147,44 +176,14 @@ export interface SaveNoteResponse {
  */
 export async function saveNote(request: SaveNoteRequest): Promise<SaveNoteResponse> {
   const { accessToken, ...bodyParams } = request;
+  const headers: Record<string, string> = {};
+  if (accessToken) headers['X-Drive-Access-Token'] = accessToken;
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
-  }
-
-  const url = `${API_BASE_URL}/saveNote`;
-  const response = await fetch(url, {
+  return apiFetch<SaveNoteResponse>('saveNote', {
     method: 'POST',
     headers,
     body: JSON.stringify(bodyParams),
   });
-
-  const contentType = response.headers.get('content-type');
-  if (!contentType || !contentType.includes('application/json')) {
-    const text = await response.text();
-    console.error('API returned non-JSON response:', text.substring(0, 200));
-    throw new ApiError(
-      `API error: Server returned non-JSON response (status ${response.status})`,
-      response.status,
-      'INVALID_RESPONSE'
-    );
-  }
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new ApiError(
-      data.message || data.error || 'An error occurred',
-      response.status,
-      data.code
-    );
-  }
-
-  return data as SaveNoteResponse;
 }
 
 // ============================================================
@@ -394,7 +393,7 @@ export async function checkApiHealth(): Promise<boolean> {
     const response = await fetch(`${API_BASE_URL}/classify`, {
       method: 'OPTIONS',
     });
-    return response.ok || response.status === 204;
+    return response.ok || response.status === 204 || response.status === 401;
   } catch {
     return false;
   }
@@ -473,9 +472,11 @@ export async function getDriveWebhookConfig(
 export async function registerDriveWebhook(
   request: RegisterWebhookRequest
 ): Promise<RegisterWebhookResponse> {
+  const { accessToken, ...bodyParams } = request;
   return apiFetch<RegisterWebhookResponse>('registerDriveWebhook', {
     method: 'POST',
-    body: JSON.stringify(request),
+    headers: accessToken ? { 'X-Drive-Access-Token': accessToken } : undefined,
+    body: JSON.stringify(bodyParams),
   });
 }
 
@@ -488,7 +489,8 @@ export async function unregisterDriveWebhook(
 ): Promise<{ success: boolean; message: string }> {
   return apiFetch<{ success: boolean; message: string }>('unregisterDriveWebhook', {
     method: 'POST',
-    body: JSON.stringify({ accessToken, userEmail }),
+    headers: accessToken ? { 'X-Drive-Access-Token': accessToken } : undefined,
+    body: JSON.stringify({ userEmail }),
   });
 }
 
@@ -890,43 +892,14 @@ export interface ImportFromDriveRequest {
 export async function importFromDriveSecure(
   request: ImportFromDriveRequest
 ): Promise<ImportFromDriveResponse> {
-  const url = `${API_BASE_URL}/importFromDrive`;
-
-  const response = await fetch(url, {
+  return apiFetch<ImportFromDriveResponse>('importFromDrive', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${request.accessToken}`,
-    },
+    headers: { 'X-Drive-Access-Token': request.accessToken },
     body: JSON.stringify({
       userEmail: request.userEmail,
       folderId: request.folderId,
     }),
   });
-
-  const contentType = response.headers.get('content-type');
-
-  if (!contentType || !contentType.includes('application/json')) {
-    const text = await response.text();
-    console.error('API returned non-JSON response:', text.substring(0, 200));
-    throw new ApiError(
-      `API error: Server returned non-JSON response (status ${response.status})`,
-      response.status,
-      'INVALID_RESPONSE'
-    );
-  }
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new ApiError(
-      data.message || data.error || 'An error occurred',
-      response.status,
-      data.code
-    );
-  }
-
-  return data as ImportFromDriveResponse;
 }
 
 export interface ImportedNote {

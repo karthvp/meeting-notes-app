@@ -5,6 +5,8 @@
 
 const functions = require('@google-cloud/functions-framework');
 const { Firestore } = require('@google-cloud/firestore');
+const { authenticateRequest } = require('../_shared/auth');
+const { canUserAccessNote } = require('../_shared/note-access');
 
 // Initialize Firestore
 const db = new Firestore();
@@ -29,9 +31,17 @@ async function getSlackTokens(userEmail) {
  */
 function formatNoteAsSlackBlocks(note) {
   const title = note.meeting?.title || note.title || 'Meeting Notes';
-  const date = note.meeting?.start_time
-    ? new Date(note.meeting.start_time._seconds * 1000).toLocaleDateString()
-    : 'Unknown date';
+  const rawDate = note.meeting?.start_time;
+  const dateFromTimestamp =
+    rawDate?.toDate?.() ||
+    (typeof rawDate?._seconds === 'number' ? new Date(rawDate._seconds * 1000) : null);
+  const parsedDate =
+    dateFromTimestamp ||
+    (rawDate ? new Date(rawDate) : null);
+  const date =
+    parsedDate && !Number.isNaN(parsedDate.getTime())
+      ? parsedDate.toLocaleDateString()
+      : 'Unknown date';
   const client = note.classification?.client_name;
   const project = note.classification?.project_name;
   const summary = note.summary || note.enhanced_analysis?.summary;
@@ -200,6 +210,22 @@ async function getSlackChannels(accessToken) {
   }));
 }
 
+async function assertUserCanAccessNote(noteId, userEmail) {
+  const noteDoc = await db.collection(NOTES_COLLECTION).doc(noteId).get();
+  if (!noteDoc.exists) {
+    throw new Error('Note not found');
+  }
+
+  const note = { id: noteDoc.id, ...noteDoc.data() };
+  if (!canUserAccessNote(note, userEmail)) {
+    const error = new Error('Not authorized for this note');
+    error.code = 403;
+    throw error;
+  }
+
+  return note;
+}
+
 /**
  * HTTP Cloud Function entry point
  */
@@ -218,6 +244,13 @@ functions.http('shareToSlack', async (req, res) => {
   try {
     // Handle GET request for listing channels
     if (req.method === 'GET') {
+      const authContext = await authenticateRequest(req, res, {
+        emailFields: [{ location: 'query', key: 'user_email' }],
+      });
+      if (!authContext) {
+        return;
+      }
+
       const { user_email } = req.query;
 
       if (!user_email) {
@@ -225,7 +258,7 @@ functions.http('shareToSlack', async (req, res) => {
         return;
       }
 
-      const tokens = await getSlackTokens(user_email);
+      const tokens = await getSlackTokens(authContext.email);
       if (!tokens) {
         res.status(401).json({
           error: 'Slack not connected',
@@ -245,6 +278,13 @@ functions.http('shareToSlack', async (req, res) => {
       return;
     }
 
+    const authContext = await authenticateRequest(req, res, {
+      emailFields: [{ location: 'body', key: 'user_email' }],
+    });
+    if (!authContext) {
+      return;
+    }
+
     const { note_id, channel_id, user_email, custom_message } = req.body;
 
     if (!note_id || !channel_id || !user_email) {
@@ -255,7 +295,7 @@ functions.http('shareToSlack', async (req, res) => {
     }
 
     // Get Slack tokens
-    const tokens = await getSlackTokens(user_email);
+    const tokens = await getSlackTokens(authContext.email);
     if (!tokens) {
       res.status(401).json({
         error: 'Slack not connected',
@@ -265,13 +305,7 @@ functions.http('shareToSlack', async (req, res) => {
     }
 
     // Get note data
-    const noteDoc = await db.collection(NOTES_COLLECTION).doc(note_id).get();
-    if (!noteDoc.exists) {
-      res.status(404).json({ error: 'Note not found' });
-      return;
-    }
-
-    const note = { id: noteDoc.id, ...noteDoc.data() };
+    const note = await assertUserCanAccessNote(note_id, authContext.email);
 
     // Format as Slack blocks
     const blocks = formatNoteAsSlackBlocks(note);
@@ -297,7 +331,7 @@ functions.http('shareToSlack', async (req, res) => {
         channel_id,
         message_ts: result.ts,
         shared_at: new Date().toISOString(),
-        shared_by: user_email,
+        shared_by: authContext.email,
       }),
       updated_at: Firestore.Timestamp.now(),
     });
@@ -309,6 +343,23 @@ functions.http('shareToSlack', async (req, res) => {
     });
   } catch (error) {
     console.error('Slack share error:', error);
+
+    if (error.message === 'Note not found') {
+      res.status(404).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
+    if (error.code === 403) {
+      res.status(403).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to share to Slack',

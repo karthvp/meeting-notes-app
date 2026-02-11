@@ -68,6 +68,7 @@ export interface MeetingInfo {
   duration_minutes?: number;
   organizer?: string;
   attendees?: Attendee[];
+  attendee_emails?: string[];
 }
 
 export interface Classification {
@@ -226,6 +227,16 @@ export interface MeetingData {
   end_time?: string;
 }
 
+function normalizeAttendeeEmails(attendees?: Array<Attendee | string>): string[] {
+  if (!attendees) return [];
+  const emails = attendees
+    .map((attendee) => (typeof attendee === 'string' ? attendee : attendee?.email))
+    .map((email) => email?.trim().toLowerCase())
+    .filter(Boolean) as string[];
+
+  return [...new Set(emails)];
+}
+
 export interface ClassificationResult {
   classification: {
     type: string;
@@ -359,8 +370,17 @@ export async function updateNote(
 ): Promise<void> {
   const db = getFirebaseDb();
   const noteRef = doc(db, 'notes_metadata', noteId);
+
+  const normalizedUpdates: Partial<Note> = { ...updates };
+  if (updates.meeting?.attendees) {
+    normalizedUpdates.meeting = {
+      ...updates.meeting,
+      attendee_emails: normalizeAttendeeEmails(updates.meeting.attendees),
+    };
+  }
+
   await updateDoc(noteRef, {
-    ...updates,
+    ...normalizedUpdates,
     updated_at: Timestamp.now(),
   });
 }
@@ -376,6 +396,12 @@ export async function createNote(data: Partial<Note>): Promise<string> {
 
   const noteData = {
     ...data,
+    meeting: data.meeting
+      ? {
+          ...data.meeting,
+          attendee_emails: normalizeAttendeeEmails(data.meeting.attendees as Attendee[]),
+        }
+      : undefined,
     created_at: Timestamp.now(),
     updated_at: Timestamp.now(),
     processed_at: Timestamp.now(),

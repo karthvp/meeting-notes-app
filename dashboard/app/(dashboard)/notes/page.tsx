@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getNotes, getClients, getProjects, Note } from '@/lib/firestore';
+import { getNotes, getClients, getProjects, getUserSettings, Note } from '@/lib/firestore';
+import { useAuth } from '@/components/auth/auth-provider';
 import { NotesTable } from '@/components/notes/notes-table';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, Download } from 'lucide-react';
 
 // Direct imports for modals (removed dynamic imports to eliminate caching issues)
@@ -17,6 +19,7 @@ import { ExportModal } from '@/components/notes/export-modal';
 import { ImportNotesModal } from '@/components/notes/import-notes-modal';
 
 export default function NotesPage() {
+  const { user } = useAuth();
   const [categorizeNote, setCategorizeNote] = useState<Note | null>(null);
   const [shareNote, setShareNote] = useState<Note | null>(null);
 
@@ -30,6 +33,28 @@ export default function NotesPage() {
 
   // Import modal state
   const [importModalOpen, setImportModalOpen] = useState(false);
+
+  // Notes folder configuration check
+  const [hasNotesFolder, setHasNotesFolder] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    async function checkNotesFolder() {
+      if (!user?.email) {
+        setHasNotesFolder(null);
+        return;
+      }
+
+      try {
+        const settings = await getUserSettings(user.email);
+        setHasNotesFolder(!!settings?.gemini_notes_folder_id);
+      } catch (error) {
+        console.error('Failed to check Gemini Notes folder settings:', error);
+        // Don't block import UI if settings check fails; import modal validates again.
+        setHasNotesFolder(null);
+      }
+    }
+    checkNotesFolder();
+  }, [user?.email]);
 
   const { data: notes = [], isLoading: loadingNotes, refetch: refetchNotes } = useQuery({
     queryKey: ['notes'],
@@ -65,10 +90,26 @@ export default function NotesPage() {
             Browse and manage all your meeting notes.
           </p>
         </div>
-        <Button onClick={() => setImportModalOpen(true)}>
-          <Download className="mr-2 h-4 w-4" />
-          Import from Drive
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  onClick={() => setImportModalOpen(true)}
+                  disabled={hasNotesFolder === false}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Import from Drive
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {hasNotesFolder === false && (
+              <TooltipContent>
+                <p>Configure your Gemini Notes Folder in Settings first</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       <NotesTable

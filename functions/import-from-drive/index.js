@@ -1,11 +1,11 @@
 /**
  * Egen Meeting Notes - /import-from-drive Cloud Function
  *
- * Scans entire Google Drive for Gemini meeting notes and imports them
+ * Scans a specific Google Drive folder for Gemini meeting notes and imports them
  * as uncategorized notes in Firestore.
  *
  * This function handles:
- * 1. Searching Drive for documents with "Meeting notes" in the name
+ * 1. Searching a user-configured folder for meeting note documents
  * 2. Filtering out already imported notes
  * 3. Creating new uncategorized notes in Firestore
  */
@@ -39,15 +39,15 @@ function getDriveClient(accessToken) {
 }
 
 /**
- * Search Drive for Gemini meeting notes
+ * Search Drive for Gemini meeting notes within a specific folder
  */
-async function searchForMeetingNotes(drive) {
+async function searchForMeetingNotes(drive, folderId) {
   const meetingNotes = [];
   let pageToken = null;
 
-  // Search for Google Docs with "Meeting notes" in the name
-  // This captures Gemini's auto-generated meeting notes
-  const query = "mimeType='application/vnd.google-apps.document' and name contains 'Meeting notes' and trashed=false";
+  // Search ONLY within the specified folder for Google Docs named "Meeting notes"
+  // This preserves the previous behavior while narrowing scope to the configured folder.
+  const query = `mimeType='application/vnd.google-apps.document' and name contains 'Meeting notes' and '${folderId}' in parents and trashed=false`;
 
   do {
     const response = await drive.files.list({
@@ -157,13 +157,13 @@ async function createNoteMetadata(file, userEmail) {
 /**
  * Main import function
  */
-async function importFromDrive(accessToken, userEmail) {
+async function importFromDrive(accessToken, userEmail, folderId) {
   const drive = getDriveClient(accessToken);
 
-  // Step 1: Search for meeting notes in Drive
-  console.log('Searching for meeting notes in Drive...');
-  const driveNotes = await searchForMeetingNotes(drive);
-  console.log(`Found ${driveNotes.length} meeting notes in Drive`);
+  // Step 1: Search for meeting notes in the specified folder
+  console.log(`Searching for meeting notes in folder ${folderId}...`);
+  const driveNotes = await searchForMeetingNotes(drive, folderId);
+  console.log(`Found ${driveNotes.length} meeting notes in folder`);
 
   // Step 2: Get already imported note IDs
   console.log('Checking for already imported notes...');
@@ -257,7 +257,7 @@ functions.http('importFromDrive', async (req, res) => {
       accessToken = req.body.accessToken;
     }
 
-    const { userEmail } = req.body;
+    const { userEmail, folderId } = req.body;
 
     // Validate required fields
     if (!accessToken) {
@@ -270,13 +270,18 @@ functions.http('importFromDrive', async (req, res) => {
       return;
     }
 
+    if (!folderId) {
+      res.status(400).json({ error: 'Missing required field: folderId - configure it in Dashboard Settings' });
+      return;
+    }
+
     if (!validateEgenEmail(userEmail)) {
       res.status(403).json({ error: 'User email must be @egen.com or @egen.ai' });
       return;
     }
 
-    // Perform the import
-    const result = await importFromDrive(accessToken, userEmail);
+    // Perform the import from the specified folder
+    const result = await importFromDrive(accessToken, userEmail, folderId);
 
     res.status(200).json(result);
 

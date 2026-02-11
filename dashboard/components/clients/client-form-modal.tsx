@@ -55,6 +55,17 @@ export function ClientFormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Extract folder ID from URL if pasted
+  const extractFolderIdFromInput = (input: string): string => {
+    // Check if it's a Drive URL
+    const urlMatch = input.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (urlMatch) {
+      return urlMatch[1];
+    }
+    // Otherwise assume it's a folder ID
+    return input.trim();
+  };
+
   // Initialize form when client changes
   useEffect(() => {
     if (client && open) {
@@ -258,15 +269,15 @@ export function ClientFormModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="driveFolderId">Google Drive Folder ID</Label>
+            <Label htmlFor="driveFolderId">Google Drive Folder ID or URL</Label>
             <Input
               id="driveFolderId"
-              placeholder="e.g., 1abc...xyz"
+              placeholder="Paste folder URL or ID (e.g., 1abc...xyz)"
               value={driveFolderId}
-              onChange={(e) => setDriveFolderId(e.target.value)}
+              onChange={(e) => setDriveFolderId(extractFolderIdFromInput(e.target.value))}
             />
             <p className="text-xs text-muted-foreground">
-              The folder ID from the Google Drive URL where client notes should be stored
+              Paste the Google Drive folder URL or ID where client notes should be moved
             </p>
           </div>
 

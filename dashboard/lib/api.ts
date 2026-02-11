@@ -129,6 +129,7 @@ export interface SaveNoteRequest {
   sharedWith?: Array<{ email: string; permission?: string }>;
   tags?: string[];
   userEmail: string;
+  accessToken?: string; // Optional: for Drive file operations
 }
 
 export interface SaveNoteResponse {
@@ -137,16 +138,53 @@ export interface SaveNoteResponse {
   fileUrl?: string | null;
   folderPath?: string | null;
   sharedWith?: Array<{ email: string; success: boolean; error?: string }>;
+  driveWarning?: string | null;
 }
 
 /**
  * Call the /save-note Cloud Function to save and file a note
+ * If accessToken is provided, it's sent in the Authorization header for Drive operations
  */
 export async function saveNote(request: SaveNoteRequest): Promise<SaveNoteResponse> {
-  return apiFetch<SaveNoteResponse>('saveNote', {
+  const { accessToken, ...bodyParams } = request;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const url = `${API_BASE_URL}/saveNote`;
+  const response = await fetch(url, {
     method: 'POST',
-    body: JSON.stringify(request),
+    headers,
+    body: JSON.stringify(bodyParams),
   });
+
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await response.text();
+    console.error('API returned non-JSON response:', text.substring(0, 200));
+    throw new ApiError(
+      `API error: Server returned non-JSON response (status ${response.status})`,
+      response.status,
+      'INVALID_RESPONSE'
+    );
+  }
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new ApiError(
+      data.message || data.error || 'An error occurred',
+      response.status,
+      data.code
+    );
+  }
+
+  return data as SaveNoteResponse;
 }
 
 // ============================================================
@@ -842,6 +880,7 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 export interface ImportFromDriveRequest {
   accessToken: string;
   userEmail: string;
+  folderId: string;
 }
 
 /**
@@ -861,6 +900,7 @@ export async function importFromDriveSecure(
     },
     body: JSON.stringify({
       userEmail: request.userEmail,
+      folderId: request.folderId,
     }),
   });
 

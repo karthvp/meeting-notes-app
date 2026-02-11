@@ -5,6 +5,7 @@ import { useAuth } from '@/components/auth/auth-provider';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { getFirebaseAuth, getGoogleProviderWithDriveScope } from '@/lib/firebase';
 import { importFromDriveSecure, ImportFromDriveResponse } from '@/lib/api';
+import { getUserSettings } from '@/lib/firestore';
 import {
   Dialog,
   DialogContent,
@@ -66,9 +67,19 @@ export function ImportNotesModal({
 
     setError(null);
     setState('authenticating');
-    setStatusMessage('Authenticating with Google Drive...');
+    setStatusMessage('Checking settings...');
 
     try {
+      // First, get user settings to retrieve the configured folder ID
+      const settings = await getUserSettings(user.email);
+      const folderId = settings?.gemini_notes_folder_id;
+
+      if (!folderId) {
+        throw new Error('Please configure your Gemini Notes Folder in Dashboard Settings before importing.');
+      }
+
+      setStatusMessage('Authenticating with Google Drive...');
+
       // Re-authenticate with Drive scopes to get access token
       const auth = getFirebaseAuth();
       const provider = getGoogleProviderWithDriveScope();
@@ -81,12 +92,13 @@ export function ImportNotesModal({
       }
 
       setState('importing');
-      setStatusMessage('Scanning Google Drive for meeting notes...');
+      setStatusMessage('Scanning configured folder for meeting notes...');
 
-      // Call the import API (uses Authorization header for security)
+      // Call the import API with the configured folder ID
       const importResult = await importFromDriveSecure({
         accessToken: credential.accessToken,
         userEmail: user.email,
+        folderId: folderId,
       });
 
       setResult(importResult);
@@ -118,16 +130,15 @@ export function ImportNotesModal({
               <div>
                 <h4 className="font-medium">Import Gemini Meeting Notes</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  This will scan your entire Google Drive for documents named
-                  &ldquo;Meeting notes&rdquo; (created by Google Meet&apos;s Gemini) and import
-                  them as uncategorized notes.
+                  This will scan your configured Gemini Notes folder for meeting notes
+                  (created by Google Meet&apos;s Gemini) and import them as uncategorized notes.
                 </p>
               </div>
             </div>
             <div className="text-sm text-muted-foreground space-y-2">
               <p>What happens during import:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>Searches for all &ldquo;Meeting notes&rdquo; documents in your Drive</li>
+                <li>Searches your configured Gemini Notes folder (set in Settings)</li>
                 <li>Skips notes that have already been imported</li>
                 <li>Creates new uncategorized entries for each new note</li>
                 <li>You can then categorize them individually or in bulk</li>
@@ -194,11 +205,11 @@ export function ImportNotesModal({
                       {result.imported.slice(0, 10).map((note) => (
                         <div
                           key={note.id}
-                          className="flex items-center gap-2 text-sm p-2 rounded bg-background"
+                          className="flex items-center gap-2 text-sm p-2 rounded bg-background min-w-0"
                         >
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span className="truncate">{note.title}</span>
-                          <Badge variant="secondary" className="ml-auto">New</Badge>
+                          <FileText className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                          <span className="truncate flex-1 min-w-0">{note.title}</span>
+                          <Badge variant="secondary" className="flex-shrink-0">New</Badge>
                         </div>
                       ))}
                       {result.imported.length > 10 && (
